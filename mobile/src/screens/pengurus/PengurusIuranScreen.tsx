@@ -39,6 +39,7 @@ import {
   rtDisplayLabel,
 } from '../../types/models';
 import { groupIuranByYearMonth, iuranPeriodTitle, maxDaysLate, monthLabel } from '../../lib/period';
+import { currentPeriodKey } from '../../lib/papanInfo';
 import { openWhatsAppTagihan } from '../../lib/whatsapp';
 import type { IuranKetuaMode } from './PengurusMainShell';
 
@@ -58,8 +59,12 @@ function initials(name?: string | null): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-export function PengurusIuranScreen({ rt, mode, onBack }: Props) {
+export function PengurusIuranScreen({ profile, rt, mode, onBack }: Props) {
   const toast = useToast();
+  const isBendahara = profileIsBendahara(profile);
+  const isKetua = profileIsKetua(profile);
+  const brand = isBendahara ? '#EA580C' : wargaColors.primaryGreen;
+  const brandSoft = isBendahara ? '#FFEDD5' : wargaColors.lightGreen;
   const [bills, setBills] = useState<IuranRecord[]>([]);
   const [members, setMembers] = useState<Record<string, Profile>>({});
   const [jiwa, setJiwa] = useState<Record<string, number>>({});
@@ -77,6 +82,11 @@ export function PengurusIuranScreen({ rt, mode, onBack }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [remindOpen, setRemindOpen] = useState(false);
   const [remindSent, setRemindSent] = useState<Set<string>>(new Set());
+
+  // State mode 'semua' (Iuran Bulanan).
+  const [query, setQuery] = useState('');
+  const [payFilter, setPayFilter] = useState<'semua' | 'lunas' | 'belum'>('semua');
+  const [qrisOpen, setQrisOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [list, memberList, jiwaMap] = await Promise.all([
@@ -417,7 +427,177 @@ export function PengurusIuranScreen({ rt, mode, onBack }: Props) {
     );
   }
 
-  // ── Mode VERIFIKASI & overview (layout lama) ─────────────────────────
+  // ── Mode SEMUA: Iuran Bulanan (periode berjalan, per-KK) ─────────────
+  if (mode === 'semua') {
+    const periodKey = currentPeriodKey();
+    const periodTitle = `${monthLabel(new Date().getMonth() + 1)} ${new Date().getFullYear()}`;
+    const periodBills = bills.filter((b) => b.periodKey === periodKey);
+    const totalKk = periodBills.length;
+    const paidCount = periodBills.filter(iuranIsPaid).length;
+    const belumCount = totalKk - paidCount;
+
+    const comps = rt.iuranComponents ?? [];
+    const compsTotal = comps.reduce((s, c) => s + c.amount, 0);
+    const amountPerKk = compsTotal > 0 ? compsTotal : rt.iuranAmount || 0;
+
+    const q = query.trim().toLowerCase();
+    const filtered = periodBills.filter((b) => {
+      if (payFilter === 'lunas' && !iuranIsPaid(b)) return false;
+      if (payFilter === 'belum' && iuranIsPaid(b)) return false;
+      if (q && !(b.userName ?? '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    const remind = async (b: IuranRecord) => {
+      const ok = await openWhatsAppTagihan({
+        phone: members[b.userId]?.phone ?? '',
+        wargaName: b.userName ?? 'Warga',
+        periodLabel: b.periodLabel,
+        amountFormatted: formatRupiah(b.amount),
+        rtLabel: rtDisplayLabel(rt),
+      });
+      if (!ok) toast.error(`Nomor WA ${b.userName ?? 'warga'} belum valid`);
+    };
+
+    return (
+      <SafeAreaView edges={['top']} style={styles.safe}>
+        {loading ? (
+          <View style={styles.center}><ActivityIndicator color={brand} size="large" /></View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={brand} />}
+          >
+            {onBack && (
+              <Pressable onPress={onBack} style={styles.backRow}>
+                <Icon name="chevron-back" size={18} color={brand} />
+                <Text style={[styles.backTextGreen, { color: brand }]}>Kembali ke Beranda</Text>
+              </Pressable>
+            )}
+
+            {/* Header periode + statistik */}
+            <View style={[styles.ibHeader, { backgroundColor: brand }]}>
+              <View style={styles.ibHeaderTop}>
+                <View style={styles.ibHeaderIcon}><Icon name="card" size={20} color="#fff" /></View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.ibHeaderTitle}>Iuran Bulanan</Text>
+                  <Text style={styles.ibHeaderSub}>Periode {periodTitle}</Text>
+                </View>
+                {isKetua && (
+                  <Pressable onPress={() => setCreateOpen(true)} hitSlop={8} style={styles.ibHeaderPlus}>
+                    <Icon name="add" size={20} color="#fff" />
+                  </Pressable>
+                )}
+              </View>
+              <View style={styles.ibStats}>
+                <IbStat value={totalKk} label="Total KK" />
+                <View style={styles.ibStatDivider} />
+                <IbStat value={paidCount} label="Sudah Bayar" />
+                <View style={styles.ibStatDivider} />
+                <IbStat value={belumCount} label="Belum Bayar" />
+              </View>
+            </View>
+
+            {/* Search */}
+            <View style={styles.ibSearch}>
+              <Icon name="search" size={18} color={colors.textHint} />
+              <TextInput
+                style={styles.ibSearchInput}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Cari nama atau nomor rumah..."
+                placeholderTextColor={colors.textHint}
+              />
+              {query.length > 0 && (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}><Icon name="close-circle" size={18} color={colors.textHint} /></Pressable>
+              )}
+            </View>
+
+            {/* Filter */}
+            <View style={styles.ibChips}>
+              {([['semua', 'Semua'], ['lunas', 'Lunas'], ['belum', 'Belum']] as const).map(([key, label]) => {
+                const on = payFilter === key;
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => setPayFilter(key)}
+                    style={[styles.ibChip, on && { backgroundColor: brand, borderColor: brand }]}
+                  >
+                    <Text style={[styles.ibChipText, on && { color: '#fff' }]}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Bayar via QRIS */}
+            {rt.qrisUrl && (
+              <Pressable style={styles.ibQris} onPress={() => setQrisOpen(true)}>
+                <View style={styles.ibQrisIcon}><Icon name="qr-code" size={22} color="#fff" /></View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.ibQrisTitle}>Bayar via QRIS</Text>
+                  <Text style={styles.ibQrisSub}>{rtDisplayLabel(rt)}{amountPerKk > 0 ? ` • ${formatRupiah(amountPerKk)}/KK` : ''}</Text>
+                </View>
+                <View style={styles.ibQrisBtn}><Text style={styles.ibQrisBtnText}>Lihat</Text></View>
+              </Pressable>
+            )}
+
+            {/* Daftar warga */}
+            <View style={styles.ibListHead}>
+              <Text style={[wargaText.sectionTitle, { flex: 1 }]}>Daftar Warga</Text>
+              <Text style={styles.ibListCount}>{filtered.length} hasil</Text>
+            </View>
+
+            {totalKk === 0 ? (
+              <WargaEmptyState icon="receipt-outline" message={isKetua ? 'Belum ada tagihan bulan ini.\nKetuk + untuk membuat tagihan.' : 'Belum ada tagihan bulan ini.\nKetua RT belum membuat tagihan.'} />
+            ) : filtered.length === 0 ? (
+              <WargaEmptyState icon="search-outline" message="Tidak ada warga yang cocok dengan pencarian/filter." />
+            ) : (
+              filtered.map((b) => (
+                <MonthlyWargaCard
+                  key={b.id}
+                  bill={b}
+                  rtNumber={rt.rtNumber}
+                  anggota={(jiwa[b.userId] ?? 0) + 1}
+                  brand={brand}
+                  brandSoft={brandSoft}
+                  onRemind={() => remind(b)}
+                />
+              ))
+            )}
+          </ScrollView>
+        )}
+
+        <BuatTagihanModal
+          visible={createOpen}
+          rt={rt}
+          members={Object.values(members)}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={createIuran}
+        />
+
+        {/* Preview QRIS */}
+        <Modal visible={qrisOpen} transparent animationType="fade" onRequestClose={() => setQrisOpen(false)}>
+          <Pressable style={styles.qrisBackdrop} onPress={() => setQrisOpen(false)}>
+            <Pressable style={styles.qrisCard} onPress={() => {}}>
+              <View style={styles.qrisCardHead}>
+                <Text style={styles.qrisCardTitle}>Bayar via QRIS</Text>
+                <Pressable onPress={() => setQrisOpen(false)} hitSlop={8}><Icon name="close" size={22} color={colors.textSecondary} /></Pressable>
+              </View>
+              <Text style={styles.qrisCardSub}>{rtDisplayLabel(rt)}</Text>
+              {rt.qrisUrl && <Image source={{ uri: rt.qrisUrl }} style={styles.qrisImg} resizeMode="contain" />}
+              {amountPerKk > 0 && <Text style={styles.qrisAmount}>{formatRupiah(amountPerKk)} / KK</Text>}
+              <Pressable style={styles.qrisOpenBtn} onPress={() => rt.qrisUrl && Linking.openURL(rt.qrisUrl)}>
+                <Icon name="open-outline" size={16} color={brand} />
+                <Text style={[styles.qrisOpenText, { color: brand }]}>Buka gambar penuh</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Mode VERIFIKASI (layout lama) ────────────────────────────────────
   const focused = mode === 'verifikasi';
   const title = mode === 'verifikasi' ? 'Verifikasi Iuran' : 'Iuran RT';
   const infoText = focused
@@ -898,6 +1078,70 @@ function KetuaExpandableIuranCard({
   );
 }
 
+// Statistik kecil di header Iuran Bulanan.
+function IbStat({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={styles.ibStat}>
+      <Text style={styles.ibStatValue}>{value}</Text>
+      <Text style={styles.ibStatLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// Kartu warga per-KK (mode Iuran Bulanan): status Lunas / Menunggu / Belum + Ingatkan.
+function MonthlyWargaCard({
+  bill,
+  rtNumber,
+  anggota,
+  brand,
+  brandSoft,
+  onRemind,
+}: {
+  bill: IuranRecord;
+  rtNumber: string;
+  anggota: number;
+  brand: string;
+  brandSoft: string;
+  onRemind: () => void;
+}) {
+  const paid = iuranIsPaid(bill);
+  const awaiting = iuranIsAwaiting(bill);
+  return (
+    <View style={styles.ibCard}>
+      <View style={[styles.ibAvatar, { backgroundColor: paid ? wargaColors.primaryGreen : brand }]}>
+        <Text style={styles.ibAvatarText}>{initials(bill.userName)}</Text>
+      </View>
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <Text style={styles.ibCardName} numberOfLines={1}>{bill.userName ?? 'Warga'}</Text>
+        <Text style={styles.ibCardMeta}>RT {rtNumber} • {anggota} anggota</Text>
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 6 }}>
+        {paid ? (
+          <View style={[styles.ibBadge, { backgroundColor: '#DCFCE7' }]}>
+            <Icon name="checkmark" size={12} color={wargaColors.primaryGreen} />
+            <Text style={[styles.ibBadgeText, { color: wargaColors.primaryGreen }]}>Lunas</Text>
+          </View>
+        ) : awaiting ? (
+          <View style={[styles.ibBadge, { backgroundColor: '#FEF3C7' }]}>
+            <Icon name="time-outline" size={12} color="#B45309" />
+            <Text style={[styles.ibBadgeText, { color: '#B45309' }]}>Menunggu</Text>
+          </View>
+        ) : (
+          <>
+            <View style={[styles.ibBadge, { backgroundColor: brandSoft }]}>
+              <Text style={[styles.ibBadgeText, { color: brand }]}>Belum Bayar</Text>
+            </View>
+            <Pressable onPress={onRemind} style={styles.ibRemind} hitSlop={6}>
+              <Icon name="notifications-outline" size={13} color={brand} />
+              <Text style={[styles.ibRemindText, { color: brand }]}>Ingatkan</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: wargaColors.bgColor },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -1041,4 +1285,50 @@ const styles = StyleSheet.create({
   mSummaryDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 4 },
   mSummaryTotalLabel: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
   mSummaryTotalValue: { fontSize: 16, fontWeight: '800', color: wargaColors.primaryGreen },
+
+  // Iuran Bulanan (mode 'semua')
+  ibHeader: { borderRadius: 20, padding: 18, marginBottom: 16 },
+  ibHeaderTop: { flexDirection: 'row', alignItems: 'center' },
+  ibHeaderIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' },
+  ibHeaderTitle: { color: '#fff', fontSize: 19, fontWeight: '800' },
+  ibHeaderSub: { color: 'rgba(255,255,255,0.9)', fontSize: 12, marginTop: 1 },
+  ibHeaderPlus: { width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' },
+  ibStats: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, paddingVertical: 12, marginTop: 16 },
+  ibStat: { flex: 1, alignItems: 'center' },
+  ibStatValue: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  ibStatLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 11, marginTop: 2 },
+  ibStatDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.3)', marginVertical: 4 },
+  ibSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 4, marginBottom: 12 },
+  ibSearchInput: { flex: 1, fontSize: 14, color: colors.textPrimary, padding: 0 },
+  ibChips: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  ibChip: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  ibChipText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
+  ibQris: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F59E0B', borderRadius: 16, padding: 14, marginBottom: 18 },
+  ibQrisIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  ibQrisTitle: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  ibQrisSub: { color: 'rgba(255,255,255,0.95)', fontSize: 12, marginTop: 2 },
+  ibQrisBtn: { backgroundColor: 'rgba(255,255,255,0.28)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  ibQrisBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  ibListHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  ibListCount: { fontSize: 12, color: colors.textSecondary },
+  ibCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 12, marginBottom: 10 },
+  ibAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  ibAvatarText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  ibCardName: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
+  ibCardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  ibBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  ibBadgeText: { fontSize: 11, fontWeight: '800' },
+  ibRemind: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ibRemindText: { fontSize: 12, fontWeight: '700' },
+
+  // Preview QRIS
+  qrisBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  qrisCard: { width: '100%', maxWidth: 360, backgroundColor: colors.surface, borderRadius: 20, padding: 18, alignItems: 'center' },
+  qrisCardHead: { flexDirection: 'row', alignItems: 'center', width: '100%' },
+  qrisCardTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: colors.textPrimary },
+  qrisCardSub: { fontSize: 12, color: colors.textSecondary, alignSelf: 'flex-start', marginTop: 2 },
+  qrisImg: { width: 240, height: 240, borderRadius: 14, marginTop: 14, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
+  qrisAmount: { fontSize: 16, fontWeight: '800', color: colors.textPrimary, marginTop: 12 },
+  qrisOpenBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingVertical: 6 },
+  qrisOpenText: { fontSize: 13, fontWeight: '700' },
 });

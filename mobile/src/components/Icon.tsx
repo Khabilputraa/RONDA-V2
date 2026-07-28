@@ -175,6 +175,7 @@ const ICONS: Record<string, LucideIcon> = {
   refresh: RefreshCw,
   'remove-circle-outline': MinusCircle,
   search: Search,
+  'search-outline': Search,
   shield: Shield,
   'shield-outline': Shield,
   storefront: Store,
