@@ -25,6 +25,7 @@ import { PrimaryButton } from '../../components/Card';
 import { useToast } from '../../components/Toast';
 import { rtService } from '../../services/rtService';
 import { wargaDirectoryService } from '../../services/wargaDirectoryService';
+import { familyService } from '../../services/familyService';
 import { exportHtmlAsPdf } from '../../lib/suratPdf';
 import { extractPdfLines, renderPdfToImages } from '../../lib/pdfText';
 import { buildWargaTemplateHtml, parseWargaFromPdfText } from '../../lib/wargaImportPdf';
@@ -35,7 +36,7 @@ import {
   directoryIsPendingApproval,
   directoryRoleLabel,
 } from '../../types/directory';
-import { Profile, RtUnit, profileIsKetua } from '../../types/models';
+import { FamilyMember, Profile, RtUnit, profileIsKetua, rtDisplayLabel } from '../../types/models';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DataWarga'>;
@@ -58,11 +59,18 @@ export function DataWargaView({ profile, rt, onBack }: { profile: Profile; rt: R
   const [menuOpen, setMenuOpen] = useState(false);
   const [review, setReview] = useState<WargaDirectoryEntry | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
+  // Anggota keluarga (read-only, bisa dilihat Ketua & Bendahara).
+  const [jiwaCount, setJiwaCount] = useState<Record<string, number>>({});
+  const [familyHead, setFamilyHead] = useState<WargaDirectoryEntry | null>(null);
+  const [members, setMembers] = useState<Record<string, FamilyMember[]>>({});
+  const [loadingMembers, setLoadingMembers] = useState<Set<string>>(new Set());
+  const brand = isKetua ? colors.emerald : '#EA580C';
 
   const load = useCallback(async () => {
     try {
       const list = await wargaDirectoryService.getDirectory(rt.id);
       setAll(list);
+      familyService.countByHeadInRt(rt.id).then(setJiwaCount).catch(() => {});
     } catch (e: any) {
       toast.error(`Gagal memuat: ${String(e?.message ?? e)}`);
     } finally {
@@ -70,6 +78,21 @@ export function DataWargaView({ profile, rt, onBack }: { profile: Profile; rt: R
       setRefreshing(false);
     }
   }, [rt.id, toast]);
+
+  const openFamily = async (m: WargaDirectoryEntry) => {
+    setFamilyHead(m);
+    if (!members[m.id]) {
+      setLoadingMembers((prev) => new Set(prev).add(m.id));
+      try {
+        const list = await familyService.listForHead(m.id);
+        setMembers((prev) => ({ ...prev, [m.id]: list }));
+      } catch {
+        setMembers((prev) => ({ ...prev, [m.id]: [] }));
+      } finally {
+        setLoadingMembers((prev) => { const n = new Set(prev); n.delete(m.id); return n; });
+      }
+    }
+  };
 
   useEffect(() => {
     load();
@@ -245,37 +268,40 @@ export function DataWargaView({ profile, rt, onBack }: { profile: Profile; rt: R
               );
             }
 
+            const cnt = jiwaCount[m.id];
             return (
-              <WargaCard key={m.id} style={{ marginBottom: 10, flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-                {m.avatarUrl ? (
-                  <Image source={{ uri: m.avatarUrl }} style={styles.avatarImg} />
-                ) : (
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{m.fullName ? m.fullName[0].toUpperCase() : '?'}</Text>
-                  </View>
-                )}
-                <Pressable
-                  onPress={editable ? () => setEditing(m) : undefined}
-                  disabled={!editable}
-                  style={{ flex: 1, marginLeft: 12 }}
-                >
-                  <Text style={{ fontWeight: '600', color: colors.textPrimary }}>{m.fullName}</Text>
-                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>{m.phone}</Text>
-                  {m.blokRumah ? <Text style={{ fontSize: 12, color: colors.textHint }}>{m.blokRumah}</Text> : null}
-                </Pressable>
-                <StatusChip label={directoryRoleLabel(m)} color={chipColor} />
-                {isKetua && !m.isPendingImport && (
+              <WargaCard key={m.id} style={{ marginBottom: 10, padding: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {m.avatarUrl ? (
+                    <Image source={{ uri: m.avatarUrl }} style={styles.avatarImg} />
+                  ) : (
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{m.fullName ? m.fullName[0].toUpperCase() : '?'}</Text>
+                    </View>
+                  )}
                   <Pressable
-                    onPress={() => navigation.navigate('FamilyMembers', { rt, headId: m.id, headName: m.fullName })}
-                    hitSlop={6}
-                    style={{ padding: 6, marginLeft: 4 }}
+                    onPress={editable ? () => setEditing(m) : undefined}
+                    disabled={!editable}
+                    style={{ flex: 1, marginLeft: 12 }}
                   >
-                    <Icon name="people-outline" size={20} color="#3B82F6" />
+                    <Text style={{ fontWeight: '600', color: colors.textPrimary }}>{m.fullName}</Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>{m.phone}</Text>
+                    {m.blokRumah ? <Text style={{ fontSize: 12, color: colors.textHint }}>{m.blokRumah}</Text> : null}
                   </Pressable>
-                )}
-                {editable && (
-                  <Pressable onPress={() => setEditing(m)} hitSlop={6} style={{ padding: 6 }}>
-                    <Icon name="create-outline" size={18} color={colors.emerald} />
+                  <StatusChip label={directoryRoleLabel(m)} color={chipColor} />
+                  {editable && (
+                    <Pressable onPress={() => setEditing(m)} hitSlop={6} style={{ padding: 6 }}>
+                      <Icon name="create-outline" size={18} color={colors.emerald} />
+                    </Pressable>
+                  )}
+                </View>
+
+                {!m.isPendingImport && (
+                  <Pressable style={styles.anggotaToggle} onPress={() => openFamily(m)}>
+                    <Icon name="people-outline" size={15} color={brand} />
+                    <Text style={[styles.anggotaToggleText, { color: brand }]}>Lihat anggota keluarga{cnt != null ? ` (${cnt + 1})` : ''}</Text>
+                    <View style={{ flex: 1 }} />
+                    <Icon name="chevron-forward" size={16} color={colors.textSecondary} />
                   </Pressable>
                 )}
               </WargaCard>
@@ -322,7 +348,146 @@ export function DataWargaView({ profile, rt, onBack }: { profile: Profile; rt: R
           onReject={() => rejectWarga(review)}
         />
       )}
+
+      <FamilyPopup
+        head={familyHead}
+        rt={rt}
+        brand={brand}
+        loading={familyHead ? loadingMembers.has(familyHead.id) : false}
+        members={familyHead ? members[familyHead.id] ?? [] : []}
+        canManage={isKetua}
+        onManage={() => {
+          if (!familyHead) return;
+          const h = familyHead;
+          setFamilyHead(null);
+          navigation.navigate('FamilyMembers', { rt, headId: h.id, headName: h.fullName });
+        }}
+        onClose={() => setFamilyHead(null)}
+      />
     </SafeAreaView>
+  );
+}
+
+const BULAN_SG = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+function fmtBirth(place: string | null, date: string | null): string {
+  let d = '';
+  if (date) {
+    const dt = new Date(date);
+    d = isNaN(dt.getTime()) ? date : `${dt.getDate()} ${BULAN_SG[dt.getMonth()]} ${dt.getFullYear()}`;
+  }
+  return [place, d].filter(Boolean).join(', ');
+}
+function relationMeta(relation: string): { label: string; color: string; bg: string } {
+  const r = relation.toLowerCase();
+  if (r.includes('kepala')) return { label: relation, color: '#B45309', bg: '#FEF3C7' };
+  if (r.includes('suami')) return { label: relation, color: '#2563EB', bg: '#DBEAFE' };
+  if (r.includes('istri')) return { label: relation, color: '#DB2777', bg: '#FCE7F3' };
+  if (r.includes('anak')) return { label: relation, color: '#7C3AED', bg: '#EDE9FE' };
+  return { label: relation, color: '#6B7280', bg: '#F3F4F6' };
+}
+function genderSymbol(g: string | null): string {
+  if (!g) return '';
+  const s = g.toLowerCase();
+  return s.startsWith('l') || s.includes('pria') || s.includes('laki') ? '♂' : '♀';
+}
+
+// Popup anggota keluarga (kepala keluarga + anggota), read-only.
+function FamilyPopup({
+  head,
+  rt,
+  brand,
+  loading,
+  members,
+  canManage,
+  onManage,
+  onClose,
+}: {
+  head: WargaDirectoryEntry | null;
+  rt: RtUnit;
+  brand: string;
+  loading: boolean;
+  members: FamilyMember[];
+  canManage: boolean;
+  onManage: () => void;
+  onClose: () => void;
+}) {
+  const count = 1 + members.length;
+  return (
+    <Modal visible={!!head} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.fmBackdrop} onPress={onClose}>
+        <Pressable style={styles.fmCard} onPress={() => {}}>
+          {head && (
+            <>
+              <View style={[styles.fmHeader, { backgroundColor: brand }]}>
+                {head.avatarUrl ? (
+                  <Image source={{ uri: head.avatarUrl }} style={styles.fmHeadAvatarImg} />
+                ) : (
+                  <View style={styles.fmHeadAvatar}><Text style={styles.fmHeadAvatarText}>{head.fullName ? head.fullName.slice(0, 2).toUpperCase() : '?'}</Text></View>
+                )}
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.fmHeadName} numberOfLines={1}>{head.fullName}</Text>
+                  <View style={styles.fmHeadMeta}>
+                    <Icon name="home-outline" size={12} color="rgba(255,255,255,0.9)" />
+                    <Text style={styles.fmHeadMetaText} numberOfLines={1}>{head.blokRumah || rtDisplayLabel(rt)}</Text>
+                    {head.phone ? <><Icon name="call" size={12} color="rgba(255,255,255,0.9)" /><Text style={styles.fmHeadMetaText}>{head.phone}</Text></> : null}
+                  </View>
+                </View>
+                <Pressable onPress={onClose} hitSlop={8} style={styles.fmClose}><Icon name="close" size={18} color="#fff" /></Pressable>
+              </View>
+
+              <View style={styles.fmBody}>
+                <View style={styles.fmSectionRow}>
+                  <Icon name="people" size={15} color={brand} />
+                  <Text style={styles.fmSectionTitle}>Anggota Keluarga</Text>
+                  <View style={{ flex: 1 }} />
+                  <View style={[styles.fmCountBadge, { backgroundColor: brand + '1A' }]}><Text style={[styles.fmCountText, { color: brand }]}>{count} orang</Text></View>
+                </View>
+
+                {loading ? (
+                  <ActivityIndicator color={brand} style={{ paddingVertical: 16 }} />
+                ) : (
+                  <>
+                    <FamilyRow name={head.fullName} relation="Kepala Keluarga" sub={head.blokRumah || undefined} gender={null} />
+                    {members.map((mem) => (
+                      <FamilyRow
+                        key={mem.id}
+                        name={mem.name}
+                        relation={mem.relation || 'Anggota'}
+                        gender={mem.gender}
+                        sub={[mem.occupation, fmtBirth(mem.birthPlace, mem.birthDate)].filter(Boolean).join(' · ') || undefined}
+                      />
+                    ))}
+                    {canManage && (
+                      <Pressable style={styles.kelolaBtn} onPress={onManage}>
+                        <Icon name="create-outline" size={14} color="#3B82F6" />
+                        <Text style={styles.kelolaBtnText}>Kelola anggota keluarga</Text>
+                      </Pressable>
+                    )}
+                  </>
+                )}
+              </View>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function FamilyRow({ name, relation, sub, gender }: { name: string; relation: string; sub?: string; gender: string | null }) {
+  const meta = relationMeta(relation);
+  const sym = genderSymbol(gender);
+  return (
+    <View style={[styles.fmRow, { backgroundColor: meta.bg + '66' }]}>
+      <View style={[styles.fmAvatar, { backgroundColor: meta.color }]}><Icon name="person" size={15} color="#fff" /></View>
+      <View style={{ flex: 1, marginLeft: 10 }}>
+        <View style={styles.fmRowTop}>
+          <Text style={styles.fmName} numberOfLines={1}>{name}</Text>
+          <View style={[styles.fmRelBadge, { backgroundColor: meta.bg }]}><Text style={[styles.fmRelText, { color: meta.color }]}>{meta.label.toUpperCase()}</Text></View>
+        </View>
+        {sub ? <Text style={styles.fmSub} numberOfLines={1}>{sym ? `${sym} ` : ''}{sub}</Text> : null}
+      </View>
+    </View>
   );
 }
 
@@ -583,6 +748,32 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   appbarRow: { flexDirection: 'row', alignItems: 'center' },
   menuBtn: { padding: 10, marginRight: 8 },
+  anggotaToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  anggotaToggleText: { fontSize: 12, fontWeight: '700' },
+  kelolaBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' },
+  kelolaBtnText: { fontSize: 12, fontWeight: '700', color: '#3B82F6' },
+  fmBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  fmCard: { width: '100%', maxWidth: 420, backgroundColor: colors.surface, borderRadius: 20, overflow: 'hidden' },
+  fmHeader: { flexDirection: 'row', alignItems: 'center', padding: 16 },
+  fmHeadAvatar: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  fmHeadAvatarImg: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.25)' },
+  fmHeadAvatarText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  fmHeadName: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  fmHeadMeta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' },
+  fmHeadMetaText: { color: 'rgba(255,255,255,0.95)', fontSize: 11 },
+  fmClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  fmBody: { padding: 16 },
+  fmSectionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  fmSectionTitle: { fontSize: 14, fontWeight: '800', color: colors.textPrimary },
+  fmCountBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
+  fmCountText: { fontSize: 11, fontWeight: '700' },
+  fmRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 10, marginBottom: 8 },
+  fmAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  fmRowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  fmName: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, flexShrink: 1 },
+  fmRelBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  fmRelText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+  fmSub: { fontSize: 11.5, color: colors.textSecondary, marginTop: 2 },
   inlineBackBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 16, paddingBottom: 24 },
