@@ -73,6 +73,7 @@ import {
   List,
   TrendingUp,
   TrendingDown,
+  ArrowLeftRight,
 } from 'lucide-react-native';
 
 // Peta nama ikon gaya-Ionicons (dipakai di seluruh app) -> komponen Lucide.
@@ -82,6 +83,7 @@ const ICONS: Record<string, LucideIcon> = {
   'add-circle-outline': PlusCircle,
   'settings-outline': Settings,
   'open-outline': ExternalLink,
+  'swap-horizontal': ArrowLeftRight,
   'trash-outline': Trash2,
   'trash': Trash2,
   'camera-outline': Camera,

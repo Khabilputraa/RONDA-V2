@@ -106,6 +106,25 @@ export function generateNights(groups: RondaGroup[], opts: RondaOptions = {}): R
   return out;
 }
 
+/** Jadwal malam ronda yang SUDAH lewat (untuk history), terbaru dahulu. */
+export function generatePastNights(groups: RondaGroup[], opts: { back?: number; weekdays?: number[] } = {}): RondaNight[] {
+  if (groups.length === 0) return [];
+  const back = opts.back ?? 120;
+  const weekdays = opts.weekdays && opts.weekdays.length > 0 ? opts.weekdays : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const out: RondaNight[] = [];
+  for (let i = 1; i <= back; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+    if (weekdays && !weekdays.includes(date.getDay())) continue;
+    const gi = groupIndexOnDate(date, groups.length);
+    out.push({ date, dateKey: ymd(date), groupIndex: gi, petugas: groups[gi - 1].members });
+  }
+  return out; // sudah terbaru dahulu (i=1 = kemarin)
+}
+
 const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 export const HARI_SHORT = ['MIN', 'SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB'];
 const BULAN_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];

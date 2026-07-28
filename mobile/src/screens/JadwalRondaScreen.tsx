@@ -26,6 +26,7 @@ import { openWhatsAppPhone } from '../lib/whatsapp';
 import {
   buildGroups,
   generateNights,
+  generatePastNights,
   groupColor,
   groupIndexOnDate,
   GROUP_COLORS,
@@ -39,6 +40,7 @@ import {
   RondaPerson,
   unassignedPeople,
 } from '../lib/rondaSchedule';
+import { groupByYearMonth } from '../lib/papanInfo';
 import { profileIsKetua } from '../types/models';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -48,6 +50,7 @@ const WINDOW_DAYS = 21;
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const HARI_COL = ['SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB', 'MIN'];
 const RUMAH = (n: number) => `Rumah No. ${String(n).padStart(3, '0')}`;
+const BULAN_NAMA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
 export default function JadwalRondaScreen({ route }: Props) {
   const { profile, rt } = route.params;
@@ -58,6 +61,10 @@ export default function JadwalRondaScreen({ route }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // History ronda (jadwal lampau) — collapse tahun/bulan + expand malam
+  const [histCollapsedYears, setHistCollapsedYears] = useState<Set<number>>(new Set());
+  const [histOpenMonths, setHistOpenMonths] = useState<Set<string>>(new Set());
+  const [histOpenNights, setHistOpenNights] = useState<Set<string>>(new Set());
 
   const [rawGroups, setRawGroups] = useState<RawGroup[]>(rt.rondaGroups);
   const [perNight, setPerNight] = useState(rt.rondaPerNight);
@@ -74,6 +81,8 @@ export default function JadwalRondaScreen({ route }: Props) {
   const [gMembers, setGMembers] = useState<Set<string>>(new Set());
   // Tambahkan warga belum-bergrup ke grup
   const [assignTarget, setAssignTarget] = useState<RondaPerson | null>(null);
+  // Pindahkan petugas antar grup ({ orang, index grup asal })
+  const [moveTarget, setMoveTarget] = useState<{ person: RondaPerson; fromIndex: number } | null>(null);
   // Konfirmasi hapus grup (index di rawGroups)
   const [delIdx, setDelIdx] = useState<number | null>(null);
 
@@ -153,6 +162,18 @@ export default function JadwalRondaScreen({ route }: Props) {
     await persistGroups(next);
     toast.success('Warga ditambahkan ke grup');
   };
+  const moveTo = async (toIndex: number) => {
+    if (!moveTarget || toIndex === moveTarget.fromIndex) { setMoveTarget(null); return; }
+    const pid = moveTarget.person.id;
+    const next = rawGroups.map((g, i) => {
+      if (i === moveTarget.fromIndex) return { ...g, memberIds: g.memberIds.filter((id) => id !== pid) };
+      if (i === toIndex) return { ...g, memberIds: [...g.memberIds, pid] };
+      return g;
+    });
+    setMoveTarget(null);
+    await persistGroups(next);
+    toast.success('Petugas dipindahkan');
+  };
 
   const saveSettings = async () => {
     setSaving(true);
@@ -195,6 +216,23 @@ export default function JadwalRondaScreen({ route }: Props) {
     }
     return rows;
   }, [groups, days]);
+
+  // History ronda: jadwal lampau (dihitung dari rotasi) dikelompokkan tahun→bulan.
+  const pastNights = useMemo(() => generatePastNights(groups, { back: 120, weekdays: days }), [groups, days]);
+  const histYears = useMemo(() => {
+    const months = groupByYearMonth(pastNights, (n) => n.date);
+    const years: { year: number; count: number; months: typeof months }[] = [];
+    for (const mg of months) {
+      let y = years.find((x) => x.year === mg.year);
+      if (!y) { y = { year: mg.year, count: 0, months: [] }; years.push(y); }
+      y.months.push(mg);
+      y.count += mg.items.length;
+    }
+    return years;
+  }, [pastNights]);
+  const groupNameForIndex = (i: number) => groups.find((g) => g.index === i)?.name || `Grup ${i}`;
+  const toggleHist = <T,>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, key: T) =>
+    setter((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -281,16 +319,23 @@ export default function JadwalRondaScreen({ route }: Props) {
                 </View>
                 <View style={[styles.grupPill, { backgroundColor: selColor }]}><Text style={styles.grupPillText}>{selName}</Text></View>
               </View>
-              {selected.petugas.map((p) => (
-                <Pressable key={p.id} style={styles.memberRow} onPress={() => contact(p)}>
-                  <Avatar person={p} size={34} bg={selColor} />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.memberName}>{p.name}</Text>
-                    <Text style={styles.memberNo}>{RUMAH(p.no)}</Text>
-                  </View>
-                  <Icon name="open-outline" size={16} color={wargaColors.primaryGreen} />
-                </Pressable>
-              ))}
+              {selected.petugas.map((p) => {
+                const canMove = isKetua && manualMode && !!selGroup;
+                return (
+                  <Pressable
+                    key={p.id}
+                    style={styles.memberRow}
+                    onPress={() => (canMove ? setMoveTarget({ person: p, fromIndex: selGroup!.index - 1 }) : contact(p))}
+                  >
+                    <Avatar person={p} size={34} bg={selColor} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={styles.memberName}>{p.name}</Text>
+                      <Text style={styles.memberNo}>{RUMAH(p.no)}</Text>
+                    </View>
+                    <Icon name={canMove ? 'swap-horizontal' : 'open-outline'} size={16} color={canMove ? selColor : wargaColors.primaryGreen} />
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
@@ -306,6 +351,9 @@ export default function JadwalRondaScreen({ route }: Props) {
           </View>
           {!manualMode && (
             <Text style={styles.dimSmall}>Grup dibagi otomatis. Ketua bisa tekan + untuk membuat grup sendiri.</Text>
+          )}
+          {manualMode && isKetua && (
+            <Text style={styles.dimSmall}>Tekan anggota pada kartu grup untuk memindahkannya ke grup lain.</Text>
           )}
           <View style={styles.groupGrid}>
             {(manualMode
@@ -323,13 +371,20 @@ export default function JadwalRondaScreen({ route }: Props) {
                     <Pressable onPress={() => setDelIdx(g.rawIndex)} hitSlop={6}><Icon name="trash-outline" size={16} color={wargaColors.dangerRed} /></Pressable>
                   )}
                 </View>
-                {g.members.map((p) => (
-                  <Pressable key={p.id} style={styles.gmRow} onPress={() => contact(p)}>
-                    <Avatar person={p} size={22} bg={g.color + '22'} fg={g.color} />
-                    <Text style={styles.gmName} numberOfLines={1}>{p.name}</Text>
-                    <Icon name="open-outline" size={13} color={colors.textHint} />
-                  </Pressable>
-                ))}
+                {g.members.map((p) => {
+                  const canMove = isKetua && g.rawIndex >= 0;
+                  return (
+                    <Pressable
+                      key={p.id}
+                      style={styles.gmRow}
+                      onPress={() => (canMove ? setMoveTarget({ person: p, fromIndex: g.rawIndex }) : contact(p))}
+                    >
+                      <Avatar person={p} size={22} bg={g.color + '22'} fg={g.color} />
+                      <Text style={styles.gmName} numberOfLines={1}>{p.name}</Text>
+                      <Icon name={canMove ? 'swap-horizontal' : 'open-outline'} size={13} color={canMove ? g.color : colors.textHint} />
+                    </Pressable>
+                  );
+                })}
               </View>
             ))}
           </View>
@@ -370,6 +425,71 @@ export default function JadwalRondaScreen({ route }: Props) {
               Setiap grup bertugas bergilir sesuai rotasi. Jika berhalangan, tukar dengan anggota lain atau hubungi Ketua RT.
             </Text>
           </View>
+
+          {/* History Ronda: jadwal yang sudah lewat */}
+          {pastNights.length > 0 && (
+            <>
+              <View style={styles.sectionRow}>
+                <Text style={wargaText.title}>History Ronda</Text>
+                <View style={styles.miniBadge}><Text style={styles.miniBadgeText}>{pastNights.length}</Text></View>
+              </View>
+              {histYears.map((y) => {
+                const yOpen = !histCollapsedYears.has(y.year);
+                return (
+                  <View key={y.year} style={{ marginBottom: 8 }}>
+                    <Pressable style={styles.histYearHead} onPress={() => toggleHist(setHistCollapsedYears, y.year)}>
+                      <Icon name={yOpen ? 'chevron-down' : 'chevron-forward'} size={16} color={colors.textSecondary} />
+                      <Icon name="calendar-outline" size={15} color={colors.textSecondary} />
+                      <Text style={styles.histYearText}>{y.year}</Text>
+                      <View style={{ flex: 1 }} />
+                      <Text style={styles.histCount}>{y.count} jadwal</Text>
+                    </Pressable>
+                    {yOpen && y.months.map((mg) => {
+                      const mOpen = histOpenMonths.has(mg.key);
+                      return (
+                        <View key={mg.key} style={styles.histMonthBlock}>
+                          <Pressable style={styles.histMonthRow} onPress={() => toggleHist(setHistOpenMonths, mg.key)}>
+                            <Icon name={mOpen ? 'chevron-down' : 'chevron-forward'} size={15} color={colors.textSecondary} />
+                            <Text style={styles.histMonthName}>{BULAN_NAMA[mg.month - 1]}</Text>
+                            <View style={{ flex: 1 }} />
+                            <Text style={styles.histCount}>{mg.items.length} jadwal</Text>
+                          </Pressable>
+                          {mOpen && mg.items.map((n) => {
+                            const c = colorForIndex(n.groupIndex);
+                            const nOpen = histOpenNights.has(n.dateKey);
+                            return (
+                              <View key={n.dateKey}>
+                                <Pressable style={styles.histNightRow} onPress={() => toggleHist(setHistOpenNights, n.dateKey)}>
+                                  <Icon name={nOpen ? 'chevron-down' : 'chevron-forward'} size={13} color={colors.textHint} />
+                                  <View style={[styles.histNightIcon, { backgroundColor: c }]}><Icon name="shield" size={11} color="#fff" /></View>
+                                  <Text style={styles.histNightGroup} numberOfLines={1}>{groupNameForIndex(n.groupIndex)}</Text>
+                                  <Text style={styles.histNightDate} numberOfLines={1}> · {rondaHari(n.date)}, {n.date.getDate()} {BULAN_NAMA[n.date.getMonth()]}</Text>
+                                  <View style={{ flex: 1 }} />
+                                  <Text style={styles.histNightCount}>{n.petugas.length} orang</Text>
+                                </Pressable>
+                                {nOpen && (
+                                  <View style={styles.histMembers}>
+                                    {n.petugas.map((p) => (
+                                      <View key={p.id} style={styles.histMemberRow}>
+                                        <Avatar person={p} size={22} bg={c + '22'} fg={c} />
+                                        <Text style={styles.histMemberName} numberOfLines={1}>{p.name}</Text>
+                                        <Text style={styles.histMemberNo}>{RUMAH(p.no)}</Text>
+                                      </View>
+                                    ))}
+                                  </View>
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+            </>
+          )}
+
           <View style={{ height: 24 }} />
         </ScrollView>
       )}
@@ -433,6 +553,58 @@ export default function JadwalRondaScreen({ route }: Props) {
                 <Text style={styles.assignCount}>{g.memberIds.length} anggota</Text>
               </Pressable>
             ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: Pindahkan Petugas antar grup */}
+      <Modal visible={!!moveTarget} transparent animationType="fade" onRequestClose={() => setMoveTarget(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Pindahkan Petugas</Text>
+              <Pressable onPress={() => setMoveTarget(null)} hitSlop={8}><Icon name="close" size={22} color={colors.textSecondary} /></Pressable>
+            </View>
+            {moveTarget && (() => {
+              const fromG = rawGroups[moveTarget.fromIndex];
+              const fromColor = fromG?.color || groupColor(moveTarget.fromIndex + 1);
+              const fromName = fromG?.name || `Grup ${moveTarget.fromIndex + 1}`;
+              return (
+                <>
+                  <Text style={styles.fieldLabel}>PETUGAS</Text>
+                  <View style={styles.moveCard}>
+                    <Avatar person={moveTarget.person} size={40} bg={fromColor} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={styles.moveName}>{moveTarget.person.name}</Text>
+                      <Text style={styles.moveNo}>{RUMAH(moveTarget.person.no)}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.moveCurrentRow}>
+                    <Icon name="shield" size={13} color={fromColor} />
+                    <Text style={styles.moveCurrentText}>Grup sekarang: <Text style={{ fontWeight: '800', color: colors.textPrimary }}>{fromName}</Text></Text>
+                  </View>
+                  <Text style={styles.fieldLabel}>PINDAHKAN KE GRUP</Text>
+                  {rawGroups.map((g, i) => {
+                    const now = i === moveTarget.fromIndex;
+                    const c = g.color || groupColor(i + 1);
+                    return (
+                      <Pressable key={i} style={[styles.assignRow, now && styles.assignRowNow]} disabled={now} onPress={() => moveTo(i)}>
+                        <View style={[styles.groupIcon, { backgroundColor: c }]}><Icon name="shield" size={14} color="#fff" /></View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.assignName}>{g.name || `Grup ${i + 1}`}</Text>
+                          <Text style={styles.assignCount}>{g.memberIds.length} anggota</Text>
+                        </View>
+                        {now ? (
+                          <Text style={styles.moveNowBadge}>SEKARANG</Text>
+                        ) : (
+                          <Icon name="swap-horizontal" size={16} color={c} />
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -622,6 +794,21 @@ const styles = StyleSheet.create({
   legendText: { fontSize: 11, color: colors.textSecondary },
   infoCard: { flexDirection: 'row', gap: 10, backgroundColor: '#F5F3FF', borderWidth: 1, borderColor: '#DDD6FE', borderRadius: 14, padding: 14, marginTop: 20 },
   infoText: { flex: 1, fontSize: 11.5, color: '#5B21B6', lineHeight: 18 },
+  histYearHead: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
+  histYearText: { fontSize: 15, fontWeight: '800', color: colors.textPrimary },
+  histCount: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
+  histMonthBlock: { marginLeft: 4, marginBottom: 2 },
+  histMonthRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 6 },
+  histMonthName: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  histNightRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 10, marginLeft: 8 },
+  histNightIcon: { width: 24, height: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  histNightGroup: { fontSize: 13, fontWeight: '800', color: colors.textPrimary },
+  histNightDate: { fontSize: 12, color: colors.textSecondary, flexShrink: 1 },
+  histNightCount: { fontSize: 11, color: colors.textHint, fontWeight: '600' },
+  histMembers: { marginLeft: 34, marginRight: 10, marginBottom: 6, gap: 6 },
+  histMemberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  histMemberName: { flex: 1, fontSize: 12, fontWeight: '600', color: colors.textPrimary },
+  histMemberNo: { fontSize: 11, color: colors.textHint },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 },
   modalSheet: { backgroundColor: colors.surface, borderRadius: 18, padding: 18 },
   modalHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
@@ -639,8 +826,15 @@ const styles = StyleSheet.create({
   pickName: { fontSize: 13, fontWeight: '700', color: colors.textPrimary },
   pickNo: { fontSize: 11, color: colors.textHint },
   assignRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 12, marginBottom: 8 },
-  assignName: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  assignRowNow: { backgroundColor: colors.background, borderColor: colors.border },
+  assignName: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
   assignCount: { fontSize: 11, color: colors.textSecondary },
+  moveCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 },
+  moveName: { fontSize: 15, fontWeight: '800', color: colors.textPrimary },
+  moveNo: { fontSize: 11, color: colors.textHint, marginTop: 1 },
+  moveCurrentRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  moveCurrentText: { fontSize: 12, color: colors.textSecondary },
+  moveNowBadge: { fontSize: 9, fontWeight: '800', color: colors.textHint, letterSpacing: 0.4 },
   delCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', borderRadius: 12, padding: 12, marginTop: 6 },
   delSubLabel: { fontSize: 11, fontWeight: '700', color: wargaColors.dangerRed, letterSpacing: 0.4, marginTop: 14, marginBottom: 8 },
   delChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

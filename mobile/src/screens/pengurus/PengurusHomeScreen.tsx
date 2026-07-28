@@ -10,6 +10,7 @@ import { WargaBerandaHeader, WargaSectionHeader } from '../../components/warga/B
 import { WargaEmptyState, WargaPengumumanFeedCard } from '../../components/warga/PengurusWidgets';
 import { useToast } from '../../components/Toast';
 import { announcementReadService } from '../../services/announcementReadService';
+import { AnnouncementDetailSheet } from '../../components/warga/AnnouncementDetailSheet';
 import { rtService } from '../../services/rtService';
 import { familyService } from '../../services/familyService';
 import {
@@ -53,6 +54,7 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
   const [pendingSurat, setPendingSurat] = useState<SuratRequest[]>([]);
   const [jiwaExtra, setJiwaExtra] = useState(0);
   const [unread, setUnread] = useState(0);
+  const [detail, setDetail] = useState<Announcement | null>(null);
   const [pendingWarga, setPendingWarga] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const isKetua = profileIsKetua(profile);
@@ -97,9 +99,9 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
   );
 
   const openAnnouncement = async (a: Announcement) => {
+    setDetail(a);
     await announcementReadService.markRead(rt.id, a.id);
     setUnread(await announcementReadService.unreadCount(rt.id, announcements));
-    navigation.navigate('AnnouncementDetail', { announcement: a });
   };
 
   return (
@@ -238,6 +240,7 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
           ));
         })()}
       </ScrollView>
+      <AnnouncementDetailSheet announcement={detail} rt={rt} onClose={() => setDetail(null)} />
     </SafeAreaView>
   );
 }

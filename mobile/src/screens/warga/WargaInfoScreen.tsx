@@ -13,6 +13,7 @@ import { announcementReadService } from '../../services/announcementReadService'
 import { categoryKindFor } from '../../lib/announcementCategory';
 import { announcementActive, groupByYearMonth } from '../../lib/papanInfo';
 import { Announcement } from '../../types/models';
+import { AnnouncementDetailSheet } from '../../components/warga/AnnouncementDetailSheet';
 import { Profile, RtUnit } from '../../types/models';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -51,6 +52,7 @@ export function WargaInfoScreen({ profile, rt, onAnnouncementRead }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState(0);
+  const [detail, setDetail] = useState<Announcement | null>(null);
   const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set());
 
@@ -86,9 +88,9 @@ export function WargaInfoScreen({ profile, rt, onAnnouncementRead }: Props) {
     items.filter((a) => categoryKindFor(a) === kind).length;
 
   const openAnnouncement = async (a: Announcement) => {
+    setDetail(a);
     await announcementReadService.markRead(rt.id, a.id);
     onAnnouncementRead?.();
-    navigation.navigate('AnnouncementDetail', { announcement: a });
     load();
   };
 
@@ -182,6 +184,7 @@ export function WargaInfoScreen({ profile, rt, onAnnouncementRead }: Props) {
           })
         )}
       </ScrollView>
+      <AnnouncementDetailSheet announcement={detail} rt={rt} onClose={() => setDetail(null)} />
     </SafeAreaView>
   );
 }

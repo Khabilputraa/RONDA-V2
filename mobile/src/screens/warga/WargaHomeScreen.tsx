@@ -48,6 +48,7 @@ import { formatRupiah } from '../../config/theme';
 import { greetingByTime, formatDateShort, daysLateFromPeriodKey } from '../../lib/date';
 import { iuranPeriodTitle } from '../../lib/period';
 import { announcementActive, billActive, suratOnBoard } from '../../lib/papanInfo';
+import { AnnouncementDetailSheet } from '../../components/warga/AnnouncementDetailSheet';
 
 interface Props {
   profile: Profile;
@@ -348,47 +349,8 @@ export function WargaHomeScreen({ profile, rt, onNavigateTab, onRtSwitched }: Pr
         </View>
       </Modal>
 
-      {/* Detail pengumuman dari papan info */}
-      <Modal visible={detailInfo != null} transparent animationType="fade" onRequestClose={() => setDetailInfo(null)}>
-        <View style={styles.dBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDetailInfo(null)} />
-          <View style={styles.dDialog}>
-            {detailInfo && (() => {
-              const a = detailInfo;
-              return (
-                <View>
-                  <View style={styles.dTitleRow}>
-                    <Text style={styles.dDialogTitle}>Detail Pengumuman</Text>
-                    <Pressable onPress={() => setDetailInfo(null)} hitSlop={8} style={styles.dClose}>
-                      <Icon name="close-circle-outline" size={22} color={colors.textSecondary} />
-                    </Pressable>
-                  </View>
-                  <View style={styles.dTopRow}>
-                    <View style={[styles.dBadge, { backgroundColor: a.isPinned ? wargaColors.accentYellow : wargaColors.lightGreen }]}>
-                      <Text style={[styles.dBadgeText, { color: a.isPinned ? '#BA7517' : wargaColors.primaryGreen }]}>
-                        {a.isPinned ? 'PENTING' : 'INFO'}
-                      </Text>
-                    </View>
-                    <Text style={styles.dNomor}>{formatDateShort(a.createdAt)}</Text>
-                  </View>
-                  <View style={styles.dMini}>
-                    <View style={styles.dIcon}>
-                      <Icon name="megaphone-outline" size={20} color={wargaColors.primaryGreen} />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.dTitle} numberOfLines={2}>{a.title}</Text>
-                      <Text style={styles.dMiniSub}>Diposting oleh {a.authorName ?? 'Pengurus RT'}</Text>
-                    </View>
-                  </View>
-                  <ScrollView style={{ maxHeight: 320, marginTop: 14 }} showsVerticalScrollIndicator={false}>
-                    <Text style={styles.dInfoBody}>{a.content}</Text>
-                  </ScrollView>
-                </View>
-              );
-            })()}
-          </View>
-        </View>
-      </Modal>
+      {/* Detail pengumuman dari papan info (popup seragam) */}
+      <AnnouncementDetailSheet announcement={detailInfo} rt={rt} onClose={() => setDetailInfo(null)} />
     </SafeAreaView>
   );
 
