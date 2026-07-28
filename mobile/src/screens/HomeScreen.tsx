@@ -24,8 +24,10 @@ export default function HomeScreen({ navigation }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [rt, setRt] = useState<RtUnit | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // silent=true → refresh data tanpa memunculkan spinner (agar shell tak
+  // remount & tab tidak lompat balik ke Beranda saat onChanged dipanggil).
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     let p = await authService.getProfile();
     let autoJoined = false;
     if (p != null && !profileHasRt(p)) {
@@ -88,11 +90,11 @@ export default function HomeScreen({ navigation }: Props) {
   }
 
   if (profileIsWarga(profile)) {
-    return <WargaMainShell profile={profile} rt={rt} onLogout={logout} onChanged={load} />;
+    return <WargaMainShell profile={profile} rt={rt} onLogout={logout} onChanged={() => load(true)} />;
   }
 
   // Pengurus (Ketua RT / Bendahara).
-  return <PengurusMainShell profile={profile} rt={rt} onLogout={logout} onChanged={load} />;
+  return <PengurusMainShell profile={profile} rt={rt} onLogout={logout} onChanged={() => load(true)} />;
 }
 
 const styles = StyleSheet.create({

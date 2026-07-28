@@ -10,6 +10,7 @@ import { WargaCard, wargaText } from '../../components/warga/wargaUi';
 import { WargaPageHeader } from '../../components/warga/DashboardWidgets';
 import { WargaEmptyState, WargaPengumumanFeedCard } from '../../components/warga/PengurusWidgets';
 import { announcementReadService } from '../../services/announcementReadService';
+import { AnnouncementDetailSheet } from '../../components/warga/AnnouncementDetailSheet';
 import { rtService } from '../../services/rtService';
 import { useToast } from '../../components/Toast';
 import { confirmDialog } from '../../lib/dialog';
@@ -49,9 +50,12 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState(0);
+  const [detail, setDetail] = useState<Announcement | null>(null);
   const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set());
   const canPost = profileIsKetua(profile) || profileIsBendahara(profile);
+  const brand = profileIsKetua(profile) ? wargaColors.primaryGreen : '#EA580C';
+  const brandSoft = profileIsKetua(profile) ? wargaColors.lightGreen : '#FFEDD5';
 
   const toggleSet = <T,>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, key: T) =>
     setter((prev) => {
@@ -73,9 +77,10 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
   }, [load]);
 
   const openItem = async (a: Announcement) => {
+    setDetail(a);
+    // Tandai dibaca + refresh badge lokal saja. JANGAN onChanged() (memicu
+    // reload global yang me-remount shell → lompat ke Beranda).
     await announcementReadService.markRead(rt.id, a.id);
-    onChanged();
-    navigation.navigate('AnnouncementDetail', { announcement: a });
     load();
   };
 
@@ -112,8 +117,8 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
       {canPost && (
         <View style={styles.actionRow}>
           <Pressable style={styles.actionBtn} onPress={() => openEdit(a)}>
-            <Icon name="create-outline" size={16} color={wargaColors.primaryGreen} />
-            <Text style={styles.actionText}>Edit</Text>
+            <Icon name="create-outline" size={16} color={brand} />
+            <Text style={[styles.actionText, { color: brand }]}>Edit</Text>
           </Pressable>
           <Pressable style={styles.actionBtn} onPress={() => removeItem(a)}>
             <Icon name="trash-outline" size={16} color={wargaColors.dangerRed} />
@@ -139,13 +144,13 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
           trailing={
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               {unread > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{unread}</Text>
+                <View style={[styles.countBadge, { backgroundColor: brandSoft }]}>
+                  <Text style={[styles.countBadgeText, { color: brand }]}>{unread}</Text>
                 </View>
               )}
               {canPost && (
-                <Pressable onPress={openCreate} style={styles.addBtn}>
-                  <Icon name="add" size={22} color={wargaColors.primaryGreen} />
+                <Pressable onPress={openCreate} style={[styles.addBtn, { backgroundColor: brandSoft }]}>
+                  <Icon name="add" size={22} color={brand} />
                 </Pressable>
               )}
             </View>
@@ -161,14 +166,14 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
 
         {/* Segment: Aktif / Riwayat */}
         <View style={styles.segment}>
-          <Pressable style={[styles.segTab, tab === 0 && styles.segTabActive]} onPress={() => setTab(0)}>
-            <Icon name="megaphone-outline" size={15} color={tab === 0 ? wargaColors.primaryGreen : colors.textSecondary} />
-            <Text style={[styles.segText, tab === 0 && styles.segTextActive]}>Informasi Aktif</Text>
+          <Pressable style={[styles.segTab, tab === 0 && styles.segTabActive, tab === 0 && { backgroundColor: brandSoft }]} onPress={() => setTab(0)}>
+            <Icon name="megaphone-outline" size={15} color={tab === 0 ? brand : colors.textSecondary} />
+            <Text style={[styles.segText, tab === 0 && { color: brand }]}>Informasi Aktif</Text>
             {active.length > 0 && <View style={styles.segBadge}><Text style={styles.segBadgeText}>{active.length}</Text></View>}
           </Pressable>
-          <Pressable style={[styles.segTab, tab === 1 && styles.segTabActive]} onPress={() => setTab(1)}>
-            <Icon name="time-outline" size={15} color={tab === 1 ? wargaColors.primaryGreen : colors.textSecondary} />
-            <Text style={[styles.segText, tab === 1 && styles.segTextActive]} numberOfLines={1}>Riwayat Informasi</Text>
+          <Pressable style={[styles.segTab, tab === 1 && styles.segTabActive, tab === 1 && { backgroundColor: brandSoft }]} onPress={() => setTab(1)}>
+            <Icon name="time-outline" size={15} color={tab === 1 ? brand : colors.textSecondary} />
+            <Text style={[styles.segText, tab === 1 && { color: brand }]} numberOfLines={1}>Riwayat Informasi</Text>
             {expired.length > 0 && <View style={styles.segBadge}><Text style={styles.segBadgeText}>{expired.length}</Text></View>}
           </Pressable>
         </View>
@@ -190,7 +195,7 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
                 <Pressable style={styles.yearHeader} onPress={() => toggleSet(setCollapsedYears, y.year)}>
                   <Icon name={yOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
                   <Text style={styles.yearText}>{y.year}</Text>
-                  <View style={styles.miniBadge}><Text style={styles.countBadgeText}>{y.count}</Text></View>
+                  <View style={[styles.miniBadge, { backgroundColor: brandSoft }]}><Text style={[styles.countBadgeText, { color: brand }]}>{y.count}</Text></View>
                   <View style={{ flex: 1 }} />
                   <Text style={styles.tutupText}>{yOpen ? 'Tutup' : 'Lihat'}</Text>
                 </Pressable>
@@ -202,7 +207,7 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
                         <Pressable style={styles.monthRow} onPress={() => toggleSet(setOpenMonths, mg.key)}>
                           <Icon name={mOpen ? 'chevron-down' : 'chevron-forward'} size={16} color={colors.textSecondary} />
                           <Text style={styles.monthName}>{BULAN[mg.month - 1]}</Text>
-                          <View style={styles.miniBadge}><Text style={styles.countBadgeText}>{mg.items.length}</Text></View>
+                          <View style={[styles.miniBadge, { backgroundColor: brandSoft }]}><Text style={[styles.countBadgeText, { color: brand }]}>{mg.items.length}</Text></View>
                         </Pressable>
                         {mOpen && mg.items.map(renderCard)}
                       </View>
@@ -213,6 +218,7 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
           })
         )}
       </ScrollView>
+      <AnnouncementDetailSheet announcement={detail} rt={rt} onClose={() => setDetail(null)} />
     </SafeAreaView>
   );
 }
