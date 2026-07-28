@@ -17,6 +17,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import AnnouncementDetailScreen from './src/screens/pengumuman/AnnouncementDetailScreen';
 import WargaTagihanIuranScreen from './src/screens/warga/WargaTagihanIuranScreen';
 import WargaKontakDaruratScreen from './src/screens/warga/WargaKontakDaruratScreen';
+import JadwalRondaScreen from './src/screens/JadwalRondaScreen';
 import WargaKontribusiSayaScreen from './src/screens/warga/WargaKontribusiSayaScreen';
 import WargaRiwayatTransaksiScreen from './src/screens/warga/WargaRiwayatTransaksiScreen';
 import WargaLayananScreen from './src/screens/warga/WargaLayananScreen';
@@ -67,6 +68,7 @@ export default function App() {
               options={{ animation: 'slide_from_right' }}
             />
             <Stack.Screen name="WargaKontakDarurat" component={WargaKontakDaruratScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="JadwalRonda" component={JadwalRondaScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="WargaKontribusiSaya" component={WargaKontribusiSayaScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="WargaRiwayatTransaksi" component={WargaRiwayatTransaksiScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="WargaLayanan" component={WargaLayananScreen} options={{ animation: 'slide_from_right' }} />

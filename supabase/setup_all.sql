@@ -2568,3 +2568,48 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.reject_iuran_as_officer TO authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- 028: edit/hapus pengumuman oleh pengurus
+-- ═══════════════════════════════════════════════════════════════
+-- 028: Ketua & Bendahara bisa EDIT dan HAPUS pengumuman di RT-nya.
+-- Sebelumnya hanya ada INSERT (ketua/bendahara) & DELETE (ketua saja); UPDATE tak ada.
+
+DROP POLICY IF EXISTS "announcements_delete_ketua" ON public.announcements;
+DROP POLICY IF EXISTS "announcements_update_pengurus" ON public.announcements;
+DROP POLICY IF EXISTS "announcements_delete_pengurus" ON public.announcements;
+
+CREATE POLICY "announcements_update_pengurus" ON public.announcements
+  FOR UPDATE USING (
+    rt_id IN (SELECT rt_id FROM public.profiles WHERE id = auth.uid() AND role IN ('ketua_rt','bendahara'))
+  ) WITH CHECK (
+    rt_id IN (SELECT rt_id FROM public.profiles WHERE id = auth.uid() AND role IN ('ketua_rt','bendahara'))
+  );
+
+CREATE POLICY "announcements_delete_pengurus" ON public.announcements
+  FOR DELETE USING (
+    rt_id IN (SELECT rt_id FROM public.profiles WHERE id = auth.uid() AND role IN ('ketua_rt','bendahara'))
+  );
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- 029: setelan jadwal ronda
+-- ═══════════════════════════════════════════════════════════════
+-- 029: Setelan Jadwal Ronda (diatur Ketua). Rotasi tetap otomatis; ini hanya parameternya.
+-- ronda_days: array angka hari (0=Minggu .. 6=Sabtu). NULL/kosong = tiap malam.
+ALTER TABLE public.rt_units
+  ADD COLUMN IF NOT EXISTS ronda_per_night INT  NOT NULL DEFAULT 3,
+  ADD COLUMN IF NOT EXISTS ronda_start     TEXT NOT NULL DEFAULT '22.00',
+  ADD COLUMN IF NOT EXISTS ronda_end       TEXT NOT NULL DEFAULT '04.00',
+  ADD COLUMN IF NOT EXISTS ronda_days      INT[];
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- 030: grup ronda manual (JSONB)
+-- ═══════════════════════════════════════════════════════════════
+-- 030: Grup ronda manual (dibuat Ketua). Disimpan sebagai JSONB di rt_units.
+-- Format: [{ "name": "Grup 1", "color": "#059669", "memberIds": ["uuid", ...] }, ...]
+-- Kosong/[] = pakai pembagian grup otomatis (dari ukuran grup di setelan).
+ALTER TABLE public.rt_units
+  ADD COLUMN IF NOT EXISTS ronda_groups JSONB NOT NULL DEFAULT '[]'::jsonb;

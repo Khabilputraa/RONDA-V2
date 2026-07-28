@@ -10,6 +10,7 @@ export type RootStackParamList = {
   AnnouncementDetail: { announcement: Announcement };
   WargaTagihanIuran: { profile: Profile; rt: RtUnit; onDone?: () => void };
   WargaKontakDarurat: WargaParams;
+  JadwalRonda: WargaParams;
   WargaKontribusiSaya: WargaParams;
   WargaRiwayatTransaksi: WargaParams;
   WargaLayanan: WargaParams;
@@ -17,7 +18,7 @@ export type RootStackParamList = {
   WargaSuratForm: { profile: Profile; rt: RtUnit; suratItem: SuratItem; onSubmitted?: (suratType?: string) => void };
   WargaSuratCustom: { profile: Profile; rt: RtUnit; onSubmitted?: (suratType?: string) => void };
   SuratDraft: { rt: RtUnit; request: SuratRequest; ketuaName: string };
-  CreateAnnouncement: { rtId: string; onCreated?: () => void };
+  CreateAnnouncement: { rtId: string; onCreated?: () => void; editing?: Announcement };
   SuratPengantar: WargaParams;
   DataWarga: WargaParams;
   FamilyMembers: { rt: RtUnit; headId: string; headName: string };

@@ -27,30 +27,8 @@ interface EmergencyContact {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WargaKontakDarurat'>;
 
-const BULAN = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-];
-
-// Contoh jadwal ronda: 3 hari Minggu mendatang (placeholder sampai fitur atur ronda dibuat).
-function upcomingRonda(): { label: string; sub: string }[] {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  const add = (7 - d.getDay()) % 7 || 7;
-  d.setDate(d.getDate() + add);
-  const out: { label: string; sub: string }[] = [];
-  for (let i = 0; i < 3; i++) {
-    out.push({
-      label: `Minggu, ${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`,
-      sub: '22.00 - 04.00 · Kelompok Ronda',
-    });
-    d.setDate(d.getDate() + 7);
-  }
-  return out;
-}
-
-export default function WargaKontakDaruratScreen({ route }: Props) {
-  const { rt } = route.params;
+export default function WargaKontakDaruratScreen({ route, navigation }: Props) {
+  const { rt, profile } = route.params;
   const toast = useToast();
   const [pengurus, setPengurus] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,7 +86,6 @@ export default function WargaKontakDaruratScreen({ route }: Props) {
   const addr = rt.address?.trim();
   const loc = addr && addr.length > 0 ? addr : rt.name;
   const rtLine = `${rtDisplayLabel(rt)} — ${loc}`;
-  const ronda = useMemo(() => upcomingRonda(), []);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -139,28 +116,18 @@ export default function WargaKontakDaruratScreen({ route }: Props) {
           )}
 
           <View style={{ height: 24 }} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={wargaText.sectionTitle}>Jadwal Ronda Anda</Text>
-            <View style={styles.contohBadge}>
-              <Text style={styles.contohText}>CONTOH</Text>
-            </View>
-          </View>
+          <Text style={wargaText.sectionTitle}>Jadwal Ronda</Text>
           <View style={{ height: 12 }} />
-          {ronda.map((r, i) => (
-            <View key={i} style={styles.rondaCard}>
-              <View style={styles.rondaIcon}>
-                <Icon name="shield-outline" size={20} color="#5B21B6" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rondaLabel}>{r.label}</Text>
-                <Text style={styles.rondaSub}>{r.sub}</Text>
-              </View>
-              <Icon name="calendar-outline" size={20} color={colors.textSecondary} />
+          <Pressable style={styles.rondaCard} onPress={() => navigation.navigate('JadwalRonda', { profile, rt })}>
+            <View style={styles.rondaIcon}>
+              <Icon name="shield" size={20} color="#5B21B6" />
             </View>
-          ))}
-          <Text style={styles.rondaNote}>
-            Jadwal contoh. Pengaturan jadwal ronda oleh Ketua RT akan tersedia pada pembaruan berikutnya.
-          </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rondaLabel}>Lihat Jadwal Ronda RT</Text>
+              <Text style={styles.rondaSub}>Giliran jaga malam — otomatis bergilir per warga.</Text>
+            </View>
+            <Icon name="chevron-forward" size={18} color={colors.textSecondary} />
+          </Pressable>
         </ScrollView>
       )}
     </SafeAreaView>
@@ -204,8 +171,6 @@ const styles = StyleSheet.create({
   contactBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 },
-  contohBadge: { backgroundColor: '#EDE9FE', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  contohText: { fontSize: 9, fontWeight: '700', color: '#5B21B6', letterSpacing: 0.3 },
   rondaCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -220,5 +185,4 @@ const styles = StyleSheet.create({
   rondaIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F3E8FF', alignItems: 'center', justifyContent: 'center' },
   rondaLabel: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
   rondaSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  rondaNote: { fontSize: 11, color: colors.textSecondary, marginTop: 4, fontStyle: 'italic' },
 });

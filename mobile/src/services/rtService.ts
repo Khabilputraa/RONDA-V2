@@ -76,6 +76,11 @@ export const rtService = {
       emergency_bendahara_phone?: string | null;
       emergency_security_name?: string | null;
       emergency_security_phone?: string | null;
+      ronda_per_night?: number;
+      ronda_start?: string;
+      ronda_end?: string;
+      ronda_days?: number[] | null;
+      ronda_groups?: { name: string; color: string; memberIds: string[] }[];
     },
   ): Promise<RtUnit> {
     const { data, error } = await supabase
@@ -332,6 +337,31 @@ export const rtService = {
       .single();
     if (error) throw error;
     return announcementFromMap(data);
+  },
+
+  async updateAnnouncement(
+    id: string,
+    args: { title: string; content: string; isPinned?: boolean; eventDate?: Date | null },
+  ): Promise<Announcement> {
+    const row: Record<string, any> = {
+      title: args.title,
+      content: args.content,
+      is_pinned: args.isPinned ?? false,
+    };
+    row.event_date = args.eventDate != null ? dateOnly(args.eventDate) : null;
+    const { data, error } = await supabase
+      .from('announcements')
+      .update(row)
+      .eq('id', id)
+      .select('*, profiles(full_name)')
+      .single();
+    if (error) throw error;
+    return announcementFromMap(data);
+  },
+
+  async deleteAnnouncement(id: string): Promise<void> {
+    const { error } = await supabase.from('announcements').delete().eq('id', id);
+    if (error) throw error;
   },
 
   // ── Iuran ────────────────────────────────────────────────────────

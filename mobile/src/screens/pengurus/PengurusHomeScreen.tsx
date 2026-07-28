@@ -25,7 +25,7 @@ import {
   rtDisplayLabel,
   suratIsPending,
 } from '../../types/models';
-import { currentPeriodKey } from '../../lib/papanInfo';
+import { announcementActive, currentPeriodKey } from '../../lib/papanInfo';
 import { greetingByTime, honorificName, formatDateShort } from '../../lib/date';
 import type { RootStackParamList } from '../../navigation/types';
 import type { OfficerTabNav } from './PengurusMainShell';
@@ -162,7 +162,7 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
           <QuickTile icon="document-text" color="#2563EB" label={'Verifikasi\nSurat'} badge={suratPending} onPress={() => navigation.navigate('SuratPengantar', { profile, rt })} />
           <QuickTile icon="megaphone" color="#EA580C" label="Info" badge={unread} onPress={() => onNavigateTab(3)} />
           <QuickTile icon="card" color={wargaColors.primaryGreen} label={'Tagih\nIuran'} badge={belumBayar} onPress={() => onNavigateTab(1, 'tagih')} />
-          <QuickTile icon="shield" color="#7C3AED" label={'Jadwal\nRonda'} onPress={() => toast.success('Jadwal Ronda segera hadir')} />
+          <QuickTile icon="shield" color="#7C3AED" label={'Jadwal\nRonda'} onPress={() => navigation.navigate('JadwalRonda', { profile, rt })} />
           <QuickTile icon="call" color="#DC2626" label="Layanan" onPress={() => navigation.navigate('WargaLayanan', { profile, rt })} />
         </View>
 
@@ -220,13 +220,15 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
             onTap={() => navigation.navigate('SuratPengantar', { profile, rt })}
           />
         ))}
-        {announcements.length === 0 && pendingSurat.length === 0 ? (
-          <WargaEmptyState icon="megaphone-outline" message="Belum ada pengumuman. Buat lewat tab Info." />
-        ) : (
-          announcements.slice(0, 3).map((a) => (
+        {(() => {
+          const aktif = announcements.filter(announcementActive);
+          if (aktif.length === 0 && pendingSurat.length === 0) {
+            return <WargaEmptyState icon="megaphone-outline" message="Belum ada informasi aktif. Yang tanggalnya lewat pindah ke Riwayat." />;
+          }
+          return aktif.slice(0, 3).map((a) => (
             <WargaPengumumanFeedCard key={a.id} item={a} onTap={() => openAnnouncement(a)} />
-          ))
-        )}
+          ));
+        })()}
       </ScrollView>
     </SafeAreaView>
   );

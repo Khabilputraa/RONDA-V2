@@ -29,8 +29,15 @@ import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateAnnouncement'>;
 
+const BULAN_FULL = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+];
+const fmtIndo = (d: Date) => `${d.getDate()} ${BULAN_FULL[d.getMonth()]} ${d.getFullYear()}`;
+
 export default function CreateAnnouncementScreen({ route, navigation }: Props) {
-  const { rtId, onCreated } = route.params;
+  const { rtId, onCreated, editing } = route.params;
+  const isEditing = !!editing;
   const toast = useToast();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -67,6 +74,15 @@ export default function CreateAnnouncementScreen({ route, navigation }: Props) {
       }
     })();
   }, [rtId]);
+
+  // Mode edit: prefill dari pengumuman yang dipilih (form disederhanakan).
+  useEffect(() => {
+    if (!editing) return;
+    setTitle(editing.title);
+    setContent(editing.content);
+    setPinned(editing.isPinned);
+    if (editing.eventDate) setTanggal(fmtIndo(editing.eventDate));
+  }, [editing]);
 
   // Ganti tiap token ({AGENDA}, {NOMINAL}, ...) di template dengan nilai field.
   const fillContent = (tpl: string, flds: TemplateField[], values: Record<string, string | string[]>) => {
@@ -138,6 +154,33 @@ export default function CreateAnnouncementScreen({ route, navigation }: Props) {
   const submit = async () => {
     if (title.trim() === '') return toast.error('Judul wajib diisi');
     if (content.trim() === '') return toast.error('Isi pengumuman wajib diisi');
+
+    // ── Mode EDIT: form sederhana (judul, isi, tanggal kegiatan, pin) ──
+    if (isEditing) {
+      if (tanggal.trim() === '') return toast.error('Tanggal kegiatan wajib diisi');
+      const isoE = indoToISO(tanggal.trim());
+      const parsedE = new Date(isoE ? `${isoE}T00:00:00` : tanggal.trim());
+      const evd = !isNaN(parsedE.getTime()) ? parsedE : editing!.eventDate;
+      if (evd == null) return toast.error('Tanggal kegiatan tidak valid');
+      setSaving(true);
+      try {
+        await rtService.updateAnnouncement(editing!.id, {
+          title: title.trim(),
+          content: content.trim(),
+          isPinned: pinned,
+          eventDate: evd,
+        });
+        toast.success('Pengumuman diperbarui');
+        onCreated?.();
+        navigation.goBack();
+      } catch (e: any) {
+        toast.error(`Gagal: ${String(e?.message ?? e)}`);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     // Field template wajib dilengkapi.
     for (const f of fields) {
       const v = fieldValues[f.token];
@@ -195,9 +238,11 @@ export default function CreateAnnouncementScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
-      <WargaAppBar title="Buat Pengumuman" />
+      <WargaAppBar title={isEditing ? 'Edit Pengumuman' : 'Buat Pengumuman'} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {!isEditing && (
+          <>
           <Text style={styles.label}>Gunakan template (opsional)</Text>
           <View style={[styles.selectWrap, pickerOpen && { zIndex: 100 }]}>
             <Pressable style={[styles.dropdown, pickerOpen && styles.dropdownOpen]} onPress={() => setPickerOpen((o) => !o)}>
@@ -229,6 +274,8 @@ export default function CreateAnnouncementScreen({ route, navigation }: Props) {
             )}
           </View>
           <Text style={styles.helperSmall}>Opsional — mengisi Judul & Isi otomatis, lalu bisa diedit. Judul di bawah yang tampil ke warga.</Text>
+          </>
+          )}
 
           <Text style={styles.label}>Judul</Text>
           <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Contoh: Kerja Bakti Lingkungan" placeholderTextColor={colors.textHint} />
@@ -272,6 +319,14 @@ export default function CreateAnnouncementScreen({ route, navigation }: Props) {
             placeholderTextColor={colors.textHint}
           />
 
+          {isEditing ? (
+            <>
+              <Text style={styles.label}>Tanggal Kegiatan (wajib)</Text>
+              <Text style={styles.helperSmall}>Dipakai untuk arsip — pengumuman pindah ke Riwayat setelah tanggal ini lewat.</Text>
+              <DateField value={tanggal} onChange={setTanggal} placeholder="20 Juli 2026" />
+            </>
+          ) : (
+          <>
           <Text style={styles.label}>Detail Kegiatan (wajib)</Text>
           <Text style={styles.helperSmall}>Otomatis ditampilkan di bagian atas pengumuman.</Text>
           <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -304,6 +359,8 @@ export default function CreateAnnouncementScreen({ route, navigation }: Props) {
           ) : (
             <TextInput style={styles.input} value={lokasi} onChangeText={setLokasi} placeholder="Contoh: Lapangan RT / Balai Warga" placeholderTextColor={colors.textHint} />
           )}
+          </>
+          )}
 
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
@@ -314,7 +371,7 @@ export default function CreateAnnouncementScreen({ route, navigation }: Props) {
           </View>
 
           <View style={{ height: 24 }} />
-          <PrimaryButton label={saving ? 'Menyimpan...' : 'Publikasikan'} onPress={submit} loading={saving} />
+          <PrimaryButton label={saving ? 'Menyimpan...' : isEditing ? 'Simpan Perubahan' : 'Publikasikan'} onPress={submit} loading={saving} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

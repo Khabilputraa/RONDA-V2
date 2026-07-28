@@ -66,6 +66,9 @@ import {
   Sparkles,
   Clock,
   Wallet,
+  Settings,
+  ExternalLink,
+  Trash2,
 } from 'lucide-react-native';
 
 // Peta nama ikon gaya-Ionicons (dipakai di seluruh app) -> komponen Lucide.
@@ -73,6 +76,10 @@ import {
 const ICONS: Record<string, LucideIcon> = {
   add: Plus,
   'add-circle-outline': PlusCircle,
+  'settings-outline': Settings,
+  'open-outline': ExternalLink,
+  'trash-outline': Trash2,
+  'trash': Trash2,
   'alert-circle': AlertCircle,
   'alert-circle-outline': AlertCircle,
   'arrow-back': ArrowLeft,

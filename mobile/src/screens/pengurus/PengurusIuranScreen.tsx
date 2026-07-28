@@ -75,6 +75,8 @@ export function PengurusIuranScreen({ rt, mode, onBack }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkApproving, setBulkApproving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [remindOpen, setRemindOpen] = useState(false);
+  const [remindSent, setRemindSent] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const [list, memberList, jiwaMap] = await Promise.all([
@@ -177,14 +179,33 @@ export function PengurusIuranScreen({ rt, mode, onBack }: Props) {
     const toggleSelectAll = () =>
       setSelectedIds((prev) => (prev.size === unpaid.length ? new Set() : new Set(unpaid.map((b) => b.id))));
 
-    const mentionWarga = (bill: IuranRecord) =>
-      openWhatsAppTagihan({
-        phone: members[bill.userId]?.phone ?? '',
-        wargaName: bill.userName ?? 'Warga',
-        periodLabel: iuranPeriodTitle(bill),
-        amountFormatted: formatRupiah(bill.amount),
+    // Agregat penunggak per warga (untuk "Ingatkan Semua").
+    const penunggak = (() => {
+      const m = new Map<string, { userId: string; name: string; phone: string; total: number; periods: string[] }>();
+      for (const b of unpaid) {
+        let e = m.get(b.userId);
+        if (!e) {
+          e = { userId: b.userId, name: b.userName ?? members[b.userId]?.fullName ?? 'Warga', phone: members[b.userId]?.phone ?? '', total: 0, periods: [] };
+          m.set(b.userId, e);
+        }
+        e.total += b.amount;
+        const pt = iuranPeriodTitle(b);
+        if (!e.periods.includes(pt)) e.periods.push(pt);
+      }
+      return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
+    })();
+
+    const remindOne = async (w: { userId: string; name: string; phone: string; total: number; periods: string[] }) => {
+      const ok = await openWhatsAppTagihan({
+        phone: w.phone,
+        wargaName: w.name,
+        periodLabel: w.periods.join(', '),
+        amountFormatted: formatRupiah(w.total),
         rtLabel: rtDisplayLabel(rt),
       });
+      if (ok) setRemindSent((s) => new Set(s).add(w.userId));
+      else toast.error(`Nomor WA ${w.name} belum valid`);
+    };
 
     const approveSelected = async () => {
       if (selected.length === 0) return;
@@ -247,6 +268,13 @@ export function PengurusIuranScreen({ rt, mode, onBack }: Props) {
                 </View>
               </View>
 
+              {unpaid.length > 0 && (
+                <Pressable style={styles.remindAllBtn} onPress={() => setRemindOpen(true)}>
+                  <Icon name="logo-whatsapp" size={18} color="#fff" />
+                  <Text style={styles.remindAllText}>Ingatkan Semua ({penunggak.length})</Text>
+                </Pressable>
+              )}
+
               {/* Belum Dibayar + Pilih Semua */}
               <View style={styles.sectionRow}>
                 <Text style={[wargaText.sectionTitle, { flex: 1 }]}>Belum Dibayar</Text>
@@ -306,7 +334,6 @@ export function PengurusIuranScreen({ rt, mode, onBack }: Props) {
                                     components={rt.iuranComponents}
                                     selected={selectedIds.has(b.id)}
                                     onToggleSelect={() => toggleSelect(b.id)}
-                                    onMention={() => mentionWarga(b)}
                                   />
                                 ))}
                             </View>
@@ -348,6 +375,44 @@ export function PengurusIuranScreen({ rt, mode, onBack }: Props) {
           onClose={() => setCreateOpen(false)}
           onSubmit={createIuran}
         />
+
+        {/* Ingatkan Semua penunggak via WhatsApp */}
+        <Modal visible={remindOpen} transparent animationType="slide" onRequestClose={() => setRemindOpen(false)}>
+          <View style={styles.remindBackdrop}>
+            <View style={styles.remindSheet}>
+              <View style={styles.remindHead}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.remindTitle}>Ingatkan Iuran</Text>
+                  <Text style={styles.remindSub}>{penunggak.length} warga belum bayar · {remindSent.size} terkirim</Text>
+                </View>
+                <Pressable onPress={() => setRemindOpen(false)} hitSlop={8}><Icon name="close" size={22} color={colors.textSecondary} /></Pressable>
+              </View>
+              <Text style={styles.remindNote}>WhatsApp terbuka satu per satu. Ketuk "Kirim" pada tiap warga, pesan tagihan sudah otomatis terisi.</Text>
+              <ScrollView style={{ maxHeight: 360 }}>
+                {penunggak.map((w) => {
+                  const sent = remindSent.has(w.userId);
+                  const noPhone = w.phone.replace(/\D/g, '').length < 10;
+                  return (
+                    <View key={w.userId} style={styles.remindRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.remindName}>{w.name}</Text>
+                        <Text style={styles.remindMeta}>{formatRupiah(w.total)} · {w.periods.length} periode</Text>
+                      </View>
+                      <Pressable
+                        style={[styles.remindWaBtn, sent && styles.remindWaSent, noPhone && { opacity: 0.4 }]}
+                        disabled={noPhone}
+                        onPress={() => remindOne(w)}
+                      >
+                        <Icon name={sent ? 'checkmark' : 'logo-whatsapp'} size={16} color={sent ? wargaColors.primaryGreen : '#fff'} />
+                        <Text style={[styles.remindWaText, sent && { color: wargaColors.primaryGreen }]}>{noPhone ? 'No HP -' : sent ? 'Terkirim' : 'Kirim'}</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -448,7 +513,6 @@ function WargaTagihanCard({
   components,
   selected,
   onToggleSelect,
-  onMention,
 }: {
   bill: IuranRecord;
   jiwaCount: number;
@@ -456,7 +520,6 @@ function WargaTagihanCard({
   components: IuranComponent[];
   selected: boolean;
   onToggleSelect: () => void;
-  onMention: () => void;
 }) {
   const compsTotal = (components ?? []).reduce((s, c) => s + c.amount, 0);
   const useComps = (components?.length ?? 0) > 0 && Math.round(compsTotal) === Math.round(bill.amount);
@@ -486,9 +549,6 @@ function WargaTagihanCard({
         <View style={styles.belumBadge}>
           <Text style={styles.belumText}>BELUM</Text>
         </View>
-        <Pressable onPress={onMention} hitSlop={6} style={styles.waBtn}>
-          <Icon name="logo-whatsapp" size={17} color="#fff" />
-        </Pressable>
       </View>
 
       <View style={styles.cardBreakdown}>
@@ -867,6 +927,20 @@ const styles = StyleSheet.create({
   sectionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 22, marginBottom: 12 },
   pilihSemua: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: wargaColors.dangerRed },
   pilihSemuaText: { fontSize: 12, fontWeight: '600', color: wargaColors.dangerRed },
+  remindAllBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, minHeight: 46, borderRadius: 12, backgroundColor: '#25D366' },
+  remindAllText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  remindBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  remindSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, paddingBottom: 28 },
+  remindHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  remindTitle: { fontSize: 17, fontWeight: '800', color: colors.textPrimary },
+  remindSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  remindNote: { fontSize: 12, color: colors.textSecondary, backgroundColor: colors.background, borderRadius: 10, padding: 10, marginBottom: 10, lineHeight: 17 },
+  remindRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  remindName: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  remindMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
+  remindWaBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: '#25D366' },
+  remindWaSent: { backgroundColor: wargaColors.lightGreen },
+  remindWaText: { color: '#fff', fontWeight: '700', fontSize: 12 },
 
   yearHead: {
     flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8,

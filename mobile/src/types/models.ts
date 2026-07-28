@@ -99,6 +99,13 @@ export interface RtUnit {
   emergencyBendaharaPhone: string | null;
   emergencySecurityName: string | null;
   emergencySecurityPhone: string | null;
+  // Setelan jadwal ronda (diatur Ketua) — migrasi 029
+  rondaPerNight: number;
+  rondaStart: string;
+  rondaEnd: string;
+  rondaDays: number[]; // 0=Minggu..6=Sabtu; kosong = tiap malam
+  // Grup ronda manual (migrasi 030); kosong = auto-bagi
+  rondaGroups: { name: string; color: string; memberIds: string[] }[];
 }
 
 export function rtUnitFromMap(map: Row): RtUnit {
@@ -131,6 +138,17 @@ export function rtUnitFromMap(map: Row): RtUnit {
     emergencyBendaharaPhone: (map.emergency_bendahara_phone as string) ?? null,
     emergencySecurityName: (map.emergency_security_name as string) ?? null,
     emergencySecurityPhone: (map.emergency_security_phone as string) ?? null,
+    rondaPerNight: map.ronda_per_night != null ? Number(map.ronda_per_night) : 3,
+    rondaStart: (map.ronda_start as string) ?? '22.00',
+    rondaEnd: (map.ronda_end as string) ?? '04.00',
+    rondaDays: Array.isArray(map.ronda_days) ? (map.ronda_days as any[]).map(Number) : [],
+    rondaGroups: Array.isArray(map.ronda_groups)
+      ? (map.ronda_groups as any[]).map((g) => ({
+          name: String(g?.name ?? ''),
+          color: String(g?.color ?? ''),
+          memberIds: Array.isArray(g?.memberIds) ? (g.memberIds as any[]).map(String) : [],
+        }))
+      : [],
   };
 }
 
