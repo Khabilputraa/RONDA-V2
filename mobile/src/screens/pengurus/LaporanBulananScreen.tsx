@@ -13,6 +13,8 @@ import {
   IuranRecord,
   KasSummary,
   KasTransaction,
+  Profile,
+  RtUnit,
   emptyKasSummary,
   iuranIsPaid,
   kasIsIncome,
@@ -22,6 +24,11 @@ import {
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'LaporanBulanan'>;
+
+// Dipakai sebagai stack screen (dari Beranda/Kas) — membungkus view.
+export default function LaporanBulananScreen({ route, navigation }: Props) {
+  return <LaporanBulananView profile={route.params.profile} rt={route.params.rt} onBack={() => navigation.goBack()} />;
+}
 
 const BULAN = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -38,9 +45,10 @@ interface MonthRow {
   total: number;
 }
 
-export default function LaporanBulananScreen({ route, navigation }: Props) {
-  const { profile, rt } = route.params;
+// View Laporan Bulanan — bisa dipakai sebagai tab (dengan onBack ke Beranda).
+export function LaporanBulananView({ profile, rt, onBack }: { profile: Profile; rt: RtUnit; onBack?: () => void }) {
   const toast = useToast();
+  const brand = profileIsBendahara(profile) ? '#EA580C' : wargaColors.primaryGreen;
   const [kas, setKas] = useState<KasSummary>(emptyKasSummary());
   const [rows, setRows] = useState<MonthRow[]>([]);
   const [allTxs, setAllTxs] = useState<KasTransaction[]>([]);
@@ -180,12 +188,14 @@ export default function LaporanBulananScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
-      {/* Header hijau */}
-      <View style={styles.greenHeader}>
+      {/* Header (oranye untuk Bendahara) */}
+      <View style={[styles.greenHeader, { backgroundColor: brand }]}>
         <View style={styles.headRow}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={styles.backBtn}>
-            <Icon name="chevron-back" size={20} color="#fff" />
-          </Pressable>
+          {onBack && (
+            <Pressable onPress={onBack} hitSlop={8} style={styles.backBtn}>
+              <Icon name="chevron-back" size={20} color="#fff" />
+            </Pressable>
+          )}
           <View style={styles.headIcon}><Icon name="receipt" size={18} color="#fff" /></View>
           <View>
             <Text style={styles.headTitle}>Laporan Bulanan</Text>

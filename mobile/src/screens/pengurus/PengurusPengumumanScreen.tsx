@@ -40,9 +40,10 @@ interface Props {
   profile: Profile;
   rt: RtUnit;
   onChanged: () => void;
+  onBack?: () => void;
 }
 
-export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
+export function PengurusPengumumanScreen({ profile, rt, onChanged, onBack }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const toast = useToast();
   const [items, setItems] = useState<Announcement[]>([]);
@@ -138,6 +139,12 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.emerald} />}
       >
+        {onBack && (
+          <Pressable onPress={onBack} style={styles.backRow}>
+            <Icon name="chevron-back" size={18} color={brand} />
+            <Text style={[styles.backRowText, { color: brand }]}>Kembali ke Beranda</Text>
+          </Pressable>
+        )}
         <WargaPageHeader
           title="Pengumuman RT"
           subtitle={`Informasi untuk ${rtDisplayLabel(rt)}`}
@@ -226,6 +233,8 @@ export function PengurusPengumumanScreen({ profile, rt, onChanged }: Props) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: wargaColors.bgColor },
   scroll: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  backRowText: { fontWeight: '600' },
   countBadge: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: wargaColors.lightGreen, borderRadius: 20 },
   countBadgeText: { fontSize: 13, fontWeight: '600', color: wargaColors.primaryGreen },
   addBtn: { padding: 10, backgroundColor: wargaColors.lightGreen, borderRadius: 12 },

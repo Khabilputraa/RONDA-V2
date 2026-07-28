@@ -40,12 +40,17 @@ import {
 interface Props {
   profile: Profile;
   rt: RtUnit;
+  onBack?: () => void;
 }
 
 const BULAN = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
+
+const KATEGORI_MASUK = ['Iuran', 'Donasi', 'Sumbangan', 'Lain-lain'];
+const KATEGORI_KELUAR = ['Operasional', 'Kebersihan', 'Keamanan', 'Konsumsi', 'Perbaikan', 'Lain-lain'];
+const capFirst = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 type Filter = 'all' | 'masuk' | 'keluar';
 
@@ -99,7 +104,7 @@ function groupNested(txs: KasTransaction[]): YearGroup[] {
     });
 }
 
-export function PengurusKasScreen({ profile, rt }: Props) {
+export function PengurusKasScreen({ profile, rt, onBack }: Props) {
   const toast = useToast();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [kas, setKas] = useState<KasSummary>(emptyKasSummary());
@@ -110,6 +115,8 @@ export function PengurusKasScreen({ profile, rt }: Props) {
   const [isIncome, setIsIncome] = useState(true);
   const [hideAmount, setHideAmount] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [openYears, setOpenYears] = useState<Set<number>>(new Set());
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set());
   const [detailTx, setDetailTx] = useState<KasTransaction | null>(null);
@@ -126,7 +133,13 @@ export function PengurusKasScreen({ profile, rt }: Props) {
   const sisaPct = 100 - pengeluaranPct;
   const monthsCount = new Set(txs.map((t) => `${t.createdAt.getFullYear()}-${t.createdAt.getMonth()}`)).size;
 
-  const filtered = txs.filter((t) => (filter === 'all' ? true : filter === 'masuk' ? kasIsIncome(t) : !kasIsIncome(t)));
+  const q = query.trim().toLowerCase();
+  const filtered = txs.filter((t) => {
+    if (filter === 'masuk' && !kasIsIncome(t)) return false;
+    if (filter === 'keluar' && kasIsIncome(t)) return false;
+    if (q && !`${t.description ?? ''} ${t.category ?? ''}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
   const years = groupNested(filtered);
 
   const load = useCallback(async () => {
@@ -142,7 +155,7 @@ export function PengurusKasScreen({ profile, rt }: Props) {
     load();
   }, [load]);
 
-  const submit = async (amount: number, desc: string) => {
+  const submit = async (amount: number, desc: string, category: string) => {
     if (!(amount > 0)) { toast.error('Nominal harus lebih dari 0'); return; }
     try {
       await rtService.addKasTransaction({
@@ -150,7 +163,7 @@ export function PengurusKasScreen({ profile, rt }: Props) {
         type: isIncome ? 'masuk' : 'keluar',
         amount,
         description: desc.trim() || (isIncome ? 'Pemasukan' : 'Pengeluaran'),
-        category: isIncome ? 'pemasukan' : 'pengeluaran',
+        category: category || (isIncome ? 'pemasukan' : 'pengeluaran'),
       });
       setAddOpen(false);
       await load();
@@ -177,6 +190,11 @@ export function PengurusKasScreen({ profile, rt }: Props) {
     <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
+        {onBack && (
+          <Pressable onPress={onBack} hitSlop={8} style={styles.backBtn}>
+            <Icon name="chevron-back" size={18} color={colors.textPrimary} />
+          </Pressable>
+        )}
         <View style={[styles.headIcon, { backgroundColor: brandSoft }]}><Icon name="wallet" size={18} color={brand} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.headTitle}>Kas RT</Text>
@@ -187,7 +205,26 @@ export function PengurusKasScreen({ profile, rt }: Props) {
             <Icon name="add" size={22} color={brand} />
           </Pressable>
         )}
+        <Pressable onPress={() => { setSearchOpen((v) => !v); if (searchOpen) setQuery(''); }} hitSlop={8} style={styles.searchBtn}>
+          <Icon name={searchOpen ? 'close' : 'search'} size={18} color={colors.textPrimary} />
+        </Pressable>
       </View>
+      {searchOpen && (
+        <View style={styles.searchRow}>
+          <Icon name="search" size={16} color={colors.textHint} />
+          <TextInput
+            style={styles.searchInput}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Cari transaksi atau kategori..."
+            placeholderTextColor={colors.textHint}
+            autoFocus
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery('')} hitSlop={8}><Icon name="close-circle" size={16} color={colors.textHint} /></Pressable>
+          )}
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.emerald} size="large" /></View>
@@ -238,7 +275,7 @@ export function PengurusKasScreen({ profile, rt }: Props) {
           </View>
 
           {/* Laporan Bulanan */}
-          <Pressable style={styles.laporanCard} onPress={() => navigation.navigate('LaporanBulanan', { profile, rt })}>
+          <Pressable style={[styles.laporanCard, { backgroundColor: profileIsKetua(profile) ? '#064E3B' : '#7C2D12' }]} onPress={() => navigation.navigate('LaporanBulanan', { profile, rt })}>
             <View style={styles.laporanIcon}><Icon name="document-text-outline" size={20} color="#fff" /></View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.laporanTitle}>Laporan Bulanan</Text>
@@ -303,7 +340,12 @@ export function PengurusKasScreen({ profile, rt }: Props) {
                                   <Icon name={kasIsIncome(t) ? 'checkmark-circle' : 'remove-circle-outline'} size={20} color={kasIsIncome(t) ? wargaColors.primaryGreen : wargaColors.dangerRed} />
                                   <View style={{ flex: 1, marginLeft: 10 }}>
                                     <Text style={styles.txTitle}>{t.description}</Text>
-                                    <Text style={styles.txDate}>{kasDateLabel(t)}</Text>
+                                    <View style={styles.txMetaRow}>
+                                      {t.category && (
+                                        <View style={styles.txBadge}><Text style={styles.txBadgeText}>{capFirst(t.category)}</Text></View>
+                                      )}
+                                      <Text style={styles.txDate}>{kasDateLabel(t)}</Text>
+                                    </View>
                                   </View>
                                   <Text style={[styles.txAmount, { color: kasIsIncome(t) ? wargaColors.primaryGreen : wargaColors.dangerRed }]}>
                                     {kasIsIncome(t) ? '+' : '-'}{formatRupiah(t.amount)}
@@ -420,12 +462,16 @@ function KasFormModal({
   isIncome: boolean;
   onToggle: (v: boolean) => void;
   onClose: () => void;
-  onSubmit: (amount: number, desc: string) => Promise<void>;
+  onSubmit: (amount: number, desc: string, category: string) => Promise<void>;
 }) {
   const toast = useToast();
   const [amount, setAmount] = useState('');
   const [desc, setDesc] = useState('');
+  const [category, setCategory] = useState(KATEGORI_MASUK[0]);
   const [saving, setSaving] = useState(false);
+
+  const cats = isIncome ? KATEGORI_MASUK : KATEGORI_KELUAR;
+  useEffect(() => { setCategory((isIncome ? KATEGORI_MASUK : KATEGORI_KELUAR)[0]); }, [isIncome]);
 
   const submit = async () => {
     const val = parseFloat(amount.replace(/\D/g, ''));
@@ -433,7 +479,7 @@ function KasFormModal({
     if (desc.trim() === '') return toast.error('Keterangan wajib');
     setSaving(true);
     try {
-      await onSubmit(val, desc.trim());
+      await onSubmit(val, desc.trim(), category);
       setAmount('');
       setDesc('');
     } catch (e: any) {
@@ -462,6 +508,18 @@ function KasFormModal({
             <TextInput style={styles.mInput} value={amount} onChangeText={setAmount} keyboardType="number-pad" placeholder="0" placeholderTextColor={colors.textHint} />
             <Text style={styles.mLabel}>Keterangan</Text>
             <TextInput style={styles.mInput} value={desc} onChangeText={setDesc} placeholder="Contoh: Beli lampu jalan" placeholderTextColor={colors.textHint} />
+            <Text style={styles.mLabel}>Kategori</Text>
+            <View style={styles.catRow}>
+              {cats.map((c) => {
+                const on = category === c;
+                const accent = isIncome ? wargaColors.primaryGreen : wargaColors.dangerRed;
+                return (
+                  <Pressable key={c} onPress={() => setCategory(c)} style={[styles.catChip, on && { backgroundColor: accent, borderColor: accent }]}>
+                    <Text style={[styles.catChipText, on && { color: '#fff' }]}>{c}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <View style={{ height: 20 }} />
             <PrimaryButton label={saving ? 'Menyimpan...' : 'Simpan Transaksi'} onPress={submit} loading={saving} />
           </KeyboardAvoidingView>
@@ -476,6 +534,10 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 100 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
+  backBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  searchBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginBottom: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 10 : 2 },
+  searchInput: { flex: 1, fontSize: 14, color: colors.textPrimary, padding: 0 },
   headIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: wargaColors.lightGreen, alignItems: 'center', justifyContent: 'center' },
   headTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
   headSub: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
@@ -522,7 +584,10 @@ const styles = StyleSheet.create({
   monthCount: { fontSize: 11, color: colors.textSecondary },
   txRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingLeft: 8, borderTopWidth: 1, borderTopColor: colors.background },
   txTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
-  txDate: { fontSize: 11, color: colors.textSecondary, marginTop: 1 },
+  txMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+  txBadge: { backgroundColor: colors.background, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  txBadgeText: { fontSize: 10, fontWeight: '700', color: colors.textSecondary },
+  txDate: { fontSize: 11, color: colors.textSecondary },
   txAmount: { fontSize: 13, fontWeight: '700' },
   dBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   dCard: { width: '100%', maxWidth: 380, backgroundColor: colors.surface, borderRadius: 20, paddingHorizontal: 20, paddingBottom: 8, paddingTop: 22, overflow: 'hidden' },
@@ -548,4 +613,7 @@ const styles = StyleSheet.create({
   toggleText: { fontWeight: '600', fontSize: 13, color: colors.textSecondary },
   mLabel: { fontSize: 13, color: colors.textSecondary, marginTop: 16, marginBottom: 6 },
   mInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.textPrimary },
+  catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  catChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  catChipText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
 });

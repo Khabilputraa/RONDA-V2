@@ -16,7 +16,8 @@ import { authService } from '../../services/authService';
 import { rtService } from '../../services/rtService';
 import { wargaDirectoryService } from '../../services/wargaDirectoryService';
 import { familyService } from '../../services/familyService';
-import { Profile, RtUnit, profileIsBendahara, profileIsKetua, profileRoleLabel, rtDisplayLabel } from '../../types/models';
+import { Profile, RtUnit, iuranIsPaid, profileIsBendahara, profileIsKetua, profileRoleLabel, rtDisplayLabel } from '../../types/models';
+import { currentPeriodKey } from '../../lib/papanInfo';
 import type { RootStackParamList } from '../../navigation/types';
 
 interface Props {
@@ -24,14 +25,16 @@ interface Props {
   rt: RtUnit;
   onLogout: () => void;
   onProfileUpdated?: () => void;
+  onBack?: () => void;
 }
 
-export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, onProfileUpdated }: Props) {
+export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, onProfileUpdated, onBack }: Props) {
   const toast = useToast();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [editing, setEditing] = useState(false);
   const [saldo, setSaldo] = useState<number | null>(null);
+  const [iuranMasuk, setIuranMasuk] = useState<number | null>(null);
   const [totalWarga, setTotalWarga] = useState<number | null>(null);
   const [inviteCode, setInviteCode] = useState(rt.inviteCode);
   const [regenBusy, setRegenBusy] = useState(false);
@@ -43,6 +46,9 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
     loadNotifPrefs(initialProfile.id).then((p) => setNotifActive(countNotifActive(p)));
   }, [initialProfile.id]);
   const canManage = profileIsKetua(profile) || profileIsBendahara(profile);
+  const isBendahara = profileIsBendahara(profile);
+  const brand = isBendahara ? '#D97706' : wargaColors.primaryGreen;
+  const brandSoft = isBendahara ? '#FEF3C7' : wargaColors.lightGreen;
 
   const regenerateCode = () =>
     confirmDialog(
@@ -68,6 +74,14 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
       try {
         const ks = await rtService.getKasSummary(rt.id);
         setSaldo(ks.saldo);
+      } catch {
+        // abaikan
+      }
+      try {
+        const bills = await rtService.getIuranRecords(rt.id);
+        const pk = currentPeriodKey();
+        const masuk = bills.filter((b) => b.periodKey === pk && iuranIsPaid(b)).reduce((s, b) => s + b.amount, 0);
+        setIuranMasuk(masuk);
       } catch {
         // abaikan
       }
@@ -112,9 +126,15 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
+        {onBack && (
+          <Pressable onPress={onBack} style={styles.backRow}>
+            <Icon name="chevron-back" size={18} color={colors.emerald} />
+            <Text style={styles.backRowText}>Kembali ke Beranda</Text>
+          </Pressable>
+        )}
         {/* Kartu profil */}
         <View style={styles.headerCard}>
-          <View style={styles.headerBand} />
+          <View style={[styles.headerBand, { backgroundColor: brandSoft }]} />
           <View style={{ marginTop: -44 }}>
             <WargaProfileAvatar
               imageUrl={profile.avatarUrl}
@@ -125,10 +145,10 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
             />
           </View>
           <Text style={styles.headerName}>{profile.fullName}</Text>
-          <View style={styles.roleBadge}>
-            <Icon name="business" size={12} color={wargaColors.primaryGreen} />
-            <Text style={styles.roleBadgeText}>{profileRoleLabel(profile)}</Text>
-            <View style={styles.onlineDot} />
+          <View style={[styles.roleBadge, { backgroundColor: brandSoft }]}>
+            <Icon name={isBendahara ? 'wallet' : 'business'} size={12} color={brand} />
+            <Text style={[styles.roleBadgeText, { color: brand }]}>{profileRoleLabel(profile)}</Text>
+            <View style={[styles.onlineDot, { backgroundColor: brand }]} />
           </View>
           <Text style={styles.headerSub}>{rtDisplayLabel(rt)} · {rt.name}</Text>
         </View>
@@ -136,7 +156,7 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
         {/* 3 stat tiles */}
         <View style={styles.statRow}>
           <StatTile icon="home" color="#185FA5" value={rtDisplayLabel(rt)} label="RT / RW" />
-          <StatTile icon="people" color={wargaColors.primaryGreen} value={totalWarga == null ? '—' : String(totalWarga)} label="TOTAL WARGA" />
+          <StatTile icon="card" color={brand} value={iuranMasuk == null ? '—' : formatRupiah(iuranMasuk)} label="IURAN MASUK" />
           <StatTile icon="wallet" color="#5B21B6" value={saldo == null ? '—' : formatRupiah(saldo)} label="SALDO KAS" />
         </View>
 
@@ -175,7 +195,34 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
           onTap={() => setEditing(true)}
         />
 
-        {/* Kelola RT */}
+        {/* Kartu akses peran */}
+        <View style={{ height: 4 }} />
+        <View style={[styles.aksesCard, { backgroundColor: brandSoft, borderColor: brand + '55' }]}>
+          <View style={styles.aksesHead}>
+            <Icon name={isBendahara ? 'wallet' : 'shield'} size={16} color={brand} />
+            <Text style={[styles.aksesTitle, { color: brand }]}>{isBendahara ? 'Akses Bendahara' : 'Akses Ketua RT'}</Text>
+          </View>
+          <Text style={styles.aksesDesc}>
+            {isBendahara
+              ? 'Kelola kas, iuran, laporan keuangan & transaksi.'
+              : 'Kelola warga, iuran, kas, pengumuman, surat & ronda.'}
+          </Text>
+          <View style={styles.aksesChips}>
+            {(isBendahara
+              ? ['Kas RT', 'Iuran', 'Informasi', 'Transaksi', 'Laporan']
+              : ['Warga', 'Iuran', 'Kas RT', 'Info', 'Surat', 'Ronda']
+            ).map((c) => (
+              <View key={c} style={[styles.aksesChip, { backgroundColor: brand }]}>
+                <Text style={styles.aksesChipText}>{c}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+        <View style={{ height: 16 }} />
+
+        {/* Kelola RT — hanya Ketua (Bendahara tidak perlu) */}
+        {profileIsKetua(profile) && (
+          <>
         <View style={{ height: 12 }} />
         <Text style={styles.sectionLabel}>Kelola RT</Text>
         {profileIsKetua(profile) && (
@@ -246,6 +293,8 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
           subtitle="Panduan singkat RT OS"
           onTap={showHelp}
         />
+          </>
+        )}
 
         <View style={{ height: 20 }} />
         <Pressable onPress={confirmLogout} style={styles.logout}>
@@ -298,6 +347,8 @@ function StatTile({ icon, color, value, label }: { icon: IconName; color: string
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: wargaColors.bgColor },
   scroll: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  backRowText: { fontWeight: '600', color: colors.emerald },
   headerCard: {
     backgroundColor: colors.surface,
     borderRadius: 20,
@@ -338,6 +389,13 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
   statLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, letterSpacing: 0.3 },
   sectionLabel: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 10 },
+  aksesCard: { borderRadius: 16, borderWidth: 1, padding: 14 },
+  aksesHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  aksesTitle: { fontSize: 14, fontWeight: '800' },
+  aksesDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 6, lineHeight: 17 },
+  aksesChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  aksesChip: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  aksesChipText: { fontSize: 11, fontWeight: '700', color: '#fff' },
   inviteCard: {
     flexDirection: 'row',
     alignItems: 'center',

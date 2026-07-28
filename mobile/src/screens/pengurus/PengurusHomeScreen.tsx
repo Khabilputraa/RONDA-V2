@@ -118,9 +118,10 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
           notifCount={isKetua ? pendingWarga : menungguVerifikasi}
           onNotifTap={() =>
             isKetua
-              ? navigation.navigate('DataWarga', { profile, rt })
+              ? onNavigateTab(4)
               : onNavigateTab(1, 'verifikasi')
           }
+          onAvatarTap={() => onNavigateTab(6)}
         />
         <View style={{ height: 16 }} />
 
@@ -170,7 +171,7 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
           ) : (
             <QuickTile icon="document-text" color="#2563EB" label={'Laporan\nKas'} onPress={() => navigation.navigate('LaporanBulanan', { profile, rt })} />
           )}
-          <QuickTile icon="megaphone" color="#EA580C" label="Info" badge={unread} onPress={() => onNavigateTab(3)} />
+          <QuickTile icon="megaphone" color="#EA580C" label="Info" badge={unread} onPress={() => onNavigateTab(5)} />
           <QuickTile icon="card" color={wargaColors.primaryGreen} label={'Tagih\nIuran'} badge={belumBayar} onPress={() => onNavigateTab(1, 'tagih')} />
           <QuickTile icon="shield" color="#7C3AED" label={'Jadwal\nRonda'} onPress={() => navigation.navigate('JadwalRonda', { profile, rt })} />
           <QuickTile icon="call" color="#DC2626" label="Layanan" onPress={() => navigation.navigate('WargaLayanan', { profile, rt })} />
@@ -220,7 +221,7 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
         <WargaSectionHeader
           title="Papan Info"
           trailing="Lihat Semua >"
-          onTrailingTap={() => onNavigateTab(3)}
+          onTrailingTap={() => onNavigateTab(5)}
         />
         <View style={{ height: 10 }} />
         {pendingSurat.map((s) => (

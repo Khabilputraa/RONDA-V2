@@ -17,9 +17,9 @@ import {
 import { Icon, type IconName } from '../../components/Icon';
 import * as DocumentPicker from 'expo-document-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackScreenProps, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, radius, wargaColors } from '../../config/theme';
-import { WargaAppBar } from '../../components/warga/WargaAppBar';
 import { WargaCard, StatusChip, wargaText } from '../../components/warga/wargaUi';
 import { PrimaryButton } from '../../components/Card';
 import { useToast } from '../../components/Toast';
@@ -35,13 +35,19 @@ import {
   directoryIsPendingApproval,
   directoryRoleLabel,
 } from '../../types/directory';
-import { profileIsKetua } from '../../types/models';
+import { Profile, RtUnit, profileIsKetua } from '../../types/models';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DataWarga'>;
 
+// Dipakai sebagai stack screen (mis. dari lonceng notifikasi Beranda).
 export default function DataWargaScreen({ route, navigation }: Props) {
-  const { profile, rt } = route.params;
+  return <DataWargaView profile={route.params.profile} rt={route.params.rt} onBack={() => navigation.goBack()} />;
+}
+
+// View Data Warga — bisa dipakai sebagai tab (onBack → Beranda).
+export function DataWargaView({ profile, rt, onBack }: { profile: Profile; rt: RtUnit; onBack?: () => void }) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const toast = useToast();
   const isKetua = profileIsKetua(profile);
   const [all, setAll] = useState<WargaDirectoryEntry[]>([]);
@@ -163,7 +169,7 @@ export default function DataWargaScreen({ route, navigation }: Props) {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <View style={styles.appbarRow}>
-        <WargaAppBarInline title="Data Warga" />
+        <WargaAppBarInline title="Data Warga" onBack={onBack} />
         {isKetua && (
           <Pressable onPress={() => setMenuOpen(true)} hitSlop={8} style={styles.menuBtn}>
             <Icon name="ellipsis-vertical" size={20} color={colors.emerald} />
@@ -320,10 +326,18 @@ export default function DataWargaScreen({ route, navigation }: Props) {
   );
 }
 
-function WargaAppBarInline({ title }: { title: string }) {
+function WargaAppBarInline({ title, onBack }: { title: string; onBack?: () => void }) {
   return (
-    <View style={{ flex: 1 }}>
-      <WargaAppBar title={title} />
+    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 }}>
+      {onBack ? (
+        <Pressable onPress={onBack} hitSlop={8} style={styles.inlineBackBtn}>
+          <Icon name="chevron-back" size={18} color={colors.textPrimary} />
+        </Pressable>
+      ) : (
+        <View style={{ width: 34 }} />
+      )}
+      <Text style={[wargaText.sectionTitle, { flex: 1, textAlign: 'center' }]}>{title}</Text>
+      <View style={{ width: 34 }} />
     </View>
   );
 }
@@ -569,6 +583,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   appbarRow: { flexDirection: 'row', alignItems: 'center' },
   menuBtn: { padding: 10, marginRight: 8 },
+  inlineBackBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 16, paddingBottom: 24 },
   pendingBanner: { marginHorizontal: 16, marginTop: 4, padding: 12, backgroundColor: colors.emeraldMuted, borderRadius: 12 },

@@ -12,6 +12,7 @@ export function WargaBerandaHeader({
   avatarUrl,
   notifCount,
   onNotifTap,
+  onAvatarTap,
 }: {
   greetingLine: string;
   fullName: string;
@@ -19,17 +20,18 @@ export function WargaBerandaHeader({
   avatarUrl?: string | null;
   notifCount: number;
   onNotifTap?: () => void;
+  onAvatarTap?: () => void;
 }) {
   const initial = fullName.trim().charAt(0).toUpperCase() || 'W';
   return (
     <View style={styles.headerRow}>
-      <View style={styles.avatar}>
+      <Pressable onPress={onAvatarTap} disabled={!onAvatarTap} style={styles.avatar}>
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
         ) : (
           <Text style={styles.avatarText}>{initial}</Text>
         )}
-      </View>
+      </Pressable>
       <View style={{ flex: 1, marginLeft: 12 }}>
         <Text style={styles.greeting}>{greetingLine}</Text>
         <Text style={styles.name} numberOfLines={1}>
