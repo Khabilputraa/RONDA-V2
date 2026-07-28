@@ -10,6 +10,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, formatRupiah, wargaColors } from '../../config/theme';
 import { WargaMenuTile, WargaProfileAvatar } from '../../components/warga/DashboardWidgets';
 import { EditProfileModal } from '../../components/warga/EditProfileModal';
+import { NotifikasiSheet, PrivasiSheet, countNotifActive, loadNotifPrefs } from '../../components/warga/SettingsSheets';
 import { useToast } from '../../components/Toast';
 import { authService } from '../../services/authService';
 import { rtService } from '../../services/rtService';
@@ -34,6 +35,13 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
   const [totalWarga, setTotalWarga] = useState<number | null>(null);
   const [inviteCode, setInviteCode] = useState(rt.inviteCode);
   const [regenBusy, setRegenBusy] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [privasiOpen, setPrivasiOpen] = useState(false);
+  const [notifActive, setNotifActive] = useState(4);
+
+  useEffect(() => {
+    loadNotifPrefs(initialProfile.id).then((p) => setNotifActive(countNotifActive(p)));
+  }, [initialProfile.id]);
   const canManage = profileIsKetua(profile) || profileIsBendahara(profile);
 
   const regenerateCode = () =>
@@ -139,8 +147,8 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
           iconBg={wargaColors.lightGreen}
           iconColor={wargaColors.primaryGreen}
           title="Notifikasi"
-          subtitle="Aktif"
-          onTap={() => toast.success('Pengaturan notifikasi segera hadir')}
+          subtitle={notifActive === 0 ? 'Nonaktif' : `${notifActive} dari 4 aktif`}
+          onTap={() => setNotifOpen(true)}
         />
         <WargaMenuTile
           icon="shield-outline"
@@ -148,7 +156,7 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
           iconColor="#185FA5"
           title="Privasi & Keamanan"
           subtitle="Kelola keamanan akun"
-          onTap={() => toast.success('Pengaturan privasi segera hadir')}
+          onTap={() => setPrivasiOpen(true)}
         />
         <WargaMenuTile
           icon="home-outline"
@@ -263,6 +271,14 @@ export function PengurusProfilScreen({ profile: initialProfile, rt, onLogout, on
         onClose={() => setEditing(false)}
         onSaved={onSaved}
       />
+
+      <NotifikasiSheet
+        visible={notifOpen}
+        userId={profile.id}
+        onClose={() => setNotifOpen(false)}
+        onSaved={(p) => setNotifActive(countNotifActive(p))}
+      />
+      <PrivasiSheet visible={privasiOpen} userId={profile.id} onClose={() => setPrivasiOpen(false)} />
     </SafeAreaView>
   );
 }

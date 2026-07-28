@@ -69,6 +69,10 @@ import {
   Settings,
   ExternalLink,
   Trash2,
+  File,
+  List,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react-native';
 
 // Peta nama ikon gaya-Ionicons (dipakai di seluruh app) -> komponen Lucide.
@@ -80,6 +84,13 @@ const ICONS: Record<string, LucideIcon> = {
   'open-outline': ExternalLink,
   'trash-outline': Trash2,
   'trash': Trash2,
+  'camera-outline': Camera,
+  'document-outline': File,
+  'list-outline': List,
+  'ellipse-outline': Circle,
+  'close-circle': XCircle,
+  'trending-up': TrendingUp,
+  'trending-down': TrendingDown,
   'alert-circle': AlertCircle,
   'alert-circle-outline': AlertCircle,
   'arrow-back': ArrowLeft,
