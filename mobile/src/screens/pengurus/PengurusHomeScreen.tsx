@@ -113,13 +113,17 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
           fullName={isKetua ? honorificName(profile.fullName) : profile.fullName}
           roleRtLine={`${isKetua ? 'Ketua RT' : 'Bendahara'} • ${rtDisplayLabel(rt)}`}
           avatarUrl={profile.avatarUrl}
-          notifCount={pendingWarga}
-          onNotifTap={() => navigation.navigate('DataWarga', { profile, rt })}
+          notifCount={isKetua ? pendingWarga : menungguVerifikasi}
+          onNotifTap={() =>
+            isKetua
+              ? navigation.navigate('DataWarga', { profile, rt })
+              : onNavigateTab(1, 'verifikasi')
+          }
         />
         <View style={{ height: 16 }} />
 
-        {/* Saldo Kas RT */}
-        <Pressable style={styles.saldoCard} onPress={() => onNavigateTab(2)}>
+        {/* Saldo Kas RT (Bendahara → oranye) */}
+        <Pressable style={[styles.saldoCard, !isKetua && styles.saldoCardBendahara]} onPress={() => onNavigateTab(2)}>
           <View style={{ flex: 1 }}>
             <View style={styles.saldoLabelRow}>
               <Icon name="wallet-outline" size={14} color="rgba(255,255,255,0.9)" />
@@ -159,7 +163,11 @@ export function PengurusHomeScreen({ profile, rt, onNavigateTab }: Props) {
         <WargaSectionHeader title="Aksi Cepat" showSparkle />
         <View style={{ height: 12 }} />
         <View style={styles.quickRow}>
-          <QuickTile icon="document-text" color="#2563EB" label={'Verifikasi\nSurat'} badge={suratPending} onPress={() => navigation.navigate('SuratPengantar', { profile, rt })} />
+          {isKetua ? (
+            <QuickTile icon="document-text" color="#2563EB" label={'Verifikasi\nSurat'} badge={suratPending} onPress={() => navigation.navigate('SuratPengantar', { profile, rt })} />
+          ) : (
+            <QuickTile icon="document-text" color="#2563EB" label={'Laporan\nKas'} onPress={() => navigation.navigate('LaporanBulanan', { profile, rt })} />
+          )}
           <QuickTile icon="megaphone" color="#EA580C" label="Info" badge={unread} onPress={() => onNavigateTab(3)} />
           <QuickTile icon="card" color={wargaColors.primaryGreen} label={'Tagih\nIuran'} badge={belumBayar} onPress={() => onNavigateTab(1, 'tagih')} />
           <QuickTile icon="shield" color="#7C3AED" label={'Jadwal\nRonda'} onPress={() => navigation.navigate('JadwalRonda', { profile, rt })} />
@@ -283,6 +291,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: wargaColors.primaryGreen, borderRadius: 18, padding: 18,
   },
+  saldoCardBendahara: { backgroundColor: '#EA580C' },
   saldoLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   saldoLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.9)', letterSpacing: 0.5 },
   saldoValue: { fontSize: 28, fontWeight: '800', color: '#fff', marginTop: 6 },

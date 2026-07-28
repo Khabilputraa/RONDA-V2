@@ -114,6 +114,9 @@ export function PengurusKasScreen({ profile, rt }: Props) {
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set());
   const [detailTx, setDetailTx] = useState<KasTransaction | null>(null);
   const canEdit = profileIsKetua(profile) || profileIsBendahara(profile);
+  // Warna brand per-role: Ketua hijau, Bendahara oranye. (Nominal masuk/keluar tetap semantik.)
+  const brand = profileIsKetua(profile) ? wargaColors.primaryGreen : '#EA580C';
+  const brandSoft = profileIsKetua(profile) ? wargaColors.lightGreen : '#FFEDD5';
 
   const now = new Date();
   const monthLabel = `${BULAN[now.getMonth()]} ${now.getFullYear()}`;
@@ -174,14 +177,14 @@ export function PengurusKasScreen({ profile, rt }: Props) {
     <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headIcon}><Icon name="wallet" size={18} color={wargaColors.primaryGreen} /></View>
+        <View style={[styles.headIcon, { backgroundColor: brandSoft }]}><Icon name="wallet" size={18} color={brand} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.headTitle}>Kas RT</Text>
           <Text style={styles.headSub}>Transparansi keuangan {rtDisplayLabel(rt)}</Text>
         </View>
         {canEdit && (
-          <Pressable onPress={() => setAddOpen(true)} hitSlop={8} style={styles.addBtn}>
-            <Icon name="add" size={22} color={wargaColors.primaryGreen} />
+          <Pressable onPress={() => setAddOpen(true)} hitSlop={8} style={[styles.addBtn, { backgroundColor: brandSoft }]}>
+            <Icon name="add" size={22} color={brand} />
           </Pressable>
         )}
       </View>
@@ -194,7 +197,7 @@ export function PengurusKasScreen({ profile, rt }: Props) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.emerald} />}
         >
           {/* Saldo card */}
-          <View style={styles.saldoCard}>
+          <View style={[styles.saldoCard, { backgroundColor: brand }]}>
             <View style={styles.saldoTop}>
               <View style={styles.saldoLabelRow}>
                 <Icon name="wallet-outline" size={14} color="rgba(255,255,255,0.9)" />
@@ -246,9 +249,9 @@ export function PengurusKasScreen({ profile, rt }: Props) {
 
           {/* Filter */}
           <View style={styles.segment}>
-            <FilterTab label="Semua" active={filter === 'all'} onPress={() => setFilter('all')} />
-            <FilterTab label={`${masukCount} Masuk`} active={filter === 'masuk'} onPress={() => setFilter('masuk')} />
-            <FilterTab label={`${keluarCount} Keluar`} active={filter === 'keluar'} onPress={() => setFilter('keluar')} />
+            <FilterTab label="Semua" active={filter === 'all'} activeColor={brand} onPress={() => setFilter('all')} />
+            <FilterTab label={`${masukCount} Masuk`} active={filter === 'masuk'} activeColor={brand} onPress={() => setFilter('masuk')} />
+            <FilterTab label={`${keluarCount} Keluar`} active={filter === 'keluar'} activeColor={brand} onPress={() => setFilter('keluar')} />
           </View>
 
           {/* Riwayat Transaksi */}
@@ -331,9 +334,9 @@ export function PengurusKasScreen({ profile, rt }: Props) {
   );
 }
 
-function FilterTab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function FilterTab({ label, active, activeColor, onPress }: { label: string; active: boolean; activeColor?: string; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.filterTab, active && styles.filterTabActive]}>
+    <Pressable onPress={onPress} style={[styles.filterTab, active && styles.filterTabActive, active && activeColor ? { backgroundColor: activeColor } : null]}>
       <Text style={[styles.filterText, active && { color: '#fff' }]}>{label}</Text>
     </Pressable>
   );
