@@ -140,16 +140,21 @@ export function PengurusKasScreen({ profile, rt }: Props) {
   }, [load]);
 
   const submit = async (amount: number, desc: string) => {
-    await rtService.addKasTransaction({
-      rtId: rt.id,
-      type: isIncome ? 'masuk' : 'keluar',
-      amount,
-      description: desc,
-      category: isIncome ? 'pemasukan' : 'pengeluaran',
-    });
-    setAddOpen(false);
-    await load();
-    toast.success('Transaksi tersimpan');
+    if (!(amount > 0)) { toast.error('Nominal harus lebih dari 0'); return; }
+    try {
+      await rtService.addKasTransaction({
+        rtId: rt.id,
+        type: isIncome ? 'masuk' : 'keluar',
+        amount,
+        description: desc.trim() || (isIncome ? 'Pemasukan' : 'Pengeluaran'),
+        category: isIncome ? 'pemasukan' : 'pengeluaran',
+      });
+      setAddOpen(false);
+      await load();
+      toast.success('Transaksi tersimpan');
+    } catch (e: any) {
+      toast.error(`Gagal menyimpan: ${String(e?.message ?? e)}`);
+    }
   };
 
   const toggleYear = (y: number) =>
