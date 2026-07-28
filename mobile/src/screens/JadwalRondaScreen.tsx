@@ -1,10 +1,11 @@
 // Jadwal Ronda — model kelompok. Ketua bisa buat/hapus grup manual (nama,
 // warna, anggota). Bila belum ada grup manual → auto-bagi. Rotasi grup otomatis.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -61,6 +62,7 @@ export default function JadwalRondaScreen({ route }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const stripRef = useRef<ScrollView>(null);
   // History ronda (jadwal lampau) — collapse tahun/bulan + expand malam
   const [histCollapsedYears, setHistCollapsedYears] = useState<Set<number>>(new Set());
   const [histOpenMonths, setHistOpenMonths] = useState<Set<string>>(new Set());
@@ -100,6 +102,21 @@ export default function JadwalRondaScreen({ route }: Props) {
   }, [rt.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Web: mouse wheel (vertikal) → geser strip tanggal secara horizontal.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node: any = (stripRef.current as any)?.getScrollableNode?.();
+    if (!node) return;
+    const handler = (e: WheelEvent) => {
+      const delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      if (delta === 0) return;
+      node.scrollLeft += delta;
+      e.preventDefault();
+    };
+    node.addEventListener('wheel', handler, { passive: false });
+    return () => node.removeEventListener('wheel', handler);
+  }, [loading]);
 
   const jam = `${jamStart} - ${jamEnd}`;
   const manualMode = rawGroups.length > 0;
@@ -273,13 +290,25 @@ export default function JadwalRondaScreen({ route }: Props) {
           )}
 
           {/* Strip hari */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
+          <ScrollView ref={stripRef} horizontal showsHorizontalScrollIndicator style={{ marginTop: 12 }} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
             {nights.map((n) => {
               const active = selected?.dateKey === n.dateKey;
+              const isToday = n.dateKey === todayKey;
+              const todayOnly = isToday && !active;
+              const fgColor = active ? '#fff' : todayOnly ? '#5B21B6' : undefined;
               return (
-                <Pressable key={n.dateKey} style={[styles.dayCell, active && styles.dayCellActive]} onPress={() => setSelectedKey(n.dateKey)}>
-                  <Text style={[styles.dayName, active && { color: '#fff' }]}>{HARI_SHORT[n.date.getDay()]}</Text>
-                  <Text style={[styles.dayNum, active && { color: '#fff' }]}>{n.date.getDate()}</Text>
+                <Pressable
+                  key={n.dateKey}
+                  style={[styles.dayCell, todayOnly && styles.dayCellToday, active && styles.dayCellActive]}
+                  onPress={() => setSelectedKey(n.dateKey)}
+                >
+                  <Text style={[styles.dayName, fgColor ? { color: fgColor } : null]}>{HARI_SHORT[n.date.getDay()]}</Text>
+                  <Text style={[styles.dayNum, fgColor ? { color: fgColor } : null]}>{n.date.getDate()}</Text>
+                  {(active || isToday) && (
+                    <Text style={[styles.dayMonth, active ? { color: 'rgba(255,255,255,0.85)' } : { color: '#5B21B6' }]}>
+                      {BULAN_NAMA[n.date.getMonth()].slice(0, 3)}
+                    </Text>
+                  )}
                   <View style={[styles.dayDot, { backgroundColor: colorForIndex(n.groupIndex) }]} />
                 </Pressable>
               );
@@ -739,11 +768,13 @@ const styles = StyleSheet.create({
   heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 },
   heroBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#34D399' },
-  dayCell: { width: 56, alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingVertical: 10, gap: 3 },
+  dayCell: { width: 56, alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingVertical: 10, gap: 2 },
   dayCellActive: { backgroundColor: '#5B21B6', borderColor: '#5B21B6' },
+  dayCellToday: { backgroundColor: '#EDE9FE', borderColor: '#C4B5FD', borderWidth: 1.5 },
   dayName: { fontSize: 10, fontWeight: '700', color: colors.textSecondary },
   dayNum: { fontSize: 18, fontWeight: '800', color: colors.textPrimary },
-  dayDot: { width: 6, height: 6, borderRadius: 3 },
+  dayMonth: { fontSize: 9, fontWeight: '700' },
+  dayDot: { width: 6, height: 6, borderRadius: 3, marginTop: 1 },
   warnCard: { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 14, padding: 14, marginTop: 14 },
   warnHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   warnTitle: { fontSize: 13, fontWeight: '700', color: '#92400E' },
